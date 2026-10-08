@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# development MCP deployment state and Python caches
+/.deploy/
+__pycache__/
+*.py[cod]
