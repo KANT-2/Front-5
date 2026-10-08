@@ -150,7 +150,7 @@ export default function Admin() {
             next.groups.find(g => g.id === deleting.id)!.deleted = true;
             next.products.forEach(p => p.optionIds = p.optionIds.filter(id => id !== deleting.id));
         } await save(next); setDeleting(null); }); }}>삭제</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
- <Dialog open={preview} onOpenChange={setPreview}><DialogContent className="preview-dialog"><DialogHeader><DialogTitle>고객 미리보기</DialogTitle><DialogDescription>이 관리자 사이트의 저장된 데이터로 구성한 화면입니다. 기존 고객 사이트와는 아직 연결되지 않았습니다.</DialogDescription></DialogHeader><a href="/admin/preview" target="_blank" rel="noreferrer" className="text-sm underline">전체 페이지 새 창에서 보기 ↗</a><iframe title="고객 페이지 미리보기" src={"/preview?revision="+snapshot?.revision} className="customer-preview-frame"/></DialogContent></Dialog></>}
+ <Dialog open={preview} onOpenChange={setPreview}><DialogContent className="preview-dialog"><DialogHeader><DialogTitle>고객 미리보기</DialogTitle><DialogDescription>실제 고객 페이지를 미리 볼 수 있습니다.</DialogDescription></DialogHeader><a href="/" target="_blank" rel="noreferrer" className="text-sm underline">전체 페이지 새 창에서 보기 ↗</a><iframe title="고객 페이지 미리보기" src="/" className="customer-preview-frame"/></DialogContent></Dialog></>}
  <Toaster richColors position="bottom-right" closeButton/>
  </SidebarProvider>;
 }
