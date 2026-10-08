@@ -1,35 +1,50 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import ReviewCard from "./ReviewCard";
-import ReviewForm from "./ReviewForm";
+import FoodImage from "./FoodImage";
+import PageHeading from "./PageHeading";
+import ReviewItem from "./ReviewItem";
+import { useReviewWrite } from "./ReviewWrite";
 import { useReviews } from "./ReviewsProvider";
 import StarRating from "./StarRating";
 import { useReducedMotion } from "@/lib/hooks";
+import { PRODUCTS, money } from "@/lib/products";
 import { SORTERS, SORT_LABELS, statsOf, type SortKey } from "@/lib/reviews";
 
-const PAGE = 6;
+const PAGE = 10;
 
-export default function ReviewsView({ id, name }: { id: number; name: string }) {
-  const all = useReviews().reviewsFor(id);
+/**
+ * 고객 리뷰 화면. /reviews(전체 메뉴, pid=null)와 /product/[id]/reviews(한 메뉴)가 함께 쓴다.
+ * 메뉴를 바꾸면 해당 주소로 이동하고, 별점 막대를 누르면 그 별점만 걸러 본다.
+ */
+export default function ReviewsView({ pid }: { pid: number | null }) {
+  const { allReviews, reviewsFor } = useReviews();
+  const { openWrite } = useReviewWrite();
+  const router = useRouter();
   const reduced = useReducedMotion();
   const [sort, setSort] = useState<SortKey>("new");
   const [shown, setShown] = useState(PAGE);
   // 별점 걸러 보기 (null = 전체)
   const [star, setStar] = useState<number | null>(null);
-  const listRef = useRef<HTMLDivElement>(null);
-  const sumRef = useRef<HTMLElement>(null);
+  const listRef = useRef<HTMLOListElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const writeBtn = useRef<HTMLButtonElement>(null);
   const focusFrom = useRef<number | null>(null);
 
+  const product = pid === null ? null : PRODUCTS[pid];
+  const all = pid === null ? allReviews : reviewsFor(pid);
   const s = statsOf(all);
   const list = all.filter((r) => star === null || r.stars === star).sort(SORTERS[sort]);
+  const visible = list.slice(0, shown);
+
   const pickStar = (k: number | null) => {
     setStar((cur) => (cur === k ? null : k));
     setShown(PAGE);
   };
-  const visible = list.slice(0, shown);
 
-  // "리뷰 더보기" 뒤에는 새로 나타난 첫 카드의 제목으로 포커스를 옮긴다.
+  // "더 보기" 뒤에는 새로 나타난 첫 리뷰의 제목으로 포커스를 옮긴다.
   useEffect(() => {
     const from = focusFrom.current;
     if (from === null) return;
@@ -41,120 +56,159 @@ export default function ReviewsView({ id, name }: { id: number; name: string }) 
     }
   }, [shown]);
 
-  const scrollToForm = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    e.preventDefault();
-    document.getElementById("write")?.scrollIntoView({ behavior: reduced ? "auto" : "smooth" });
-    history.replaceState(history.state, "", "#write");
-    setTimeout(() => document.querySelector<HTMLInputElement>("#write input[name=stars]")?.focus({ preventScroll: true }), 400);
-  };
+  const write = () =>
+    openWrite(pid, {
+      onAdded: () => {
+        setSort("new");
+        setStar(null);
+        setShown(PAGE);
+        toolbarRef.current?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+      },
+    });
+
+  // 예전 "#write" 링크로 들어오면 리뷰 쓰기 모달을 바로 연다.
+  useEffect(() => {
+    if (location.hash !== "#write") return;
+    const t = setTimeout(() => {
+      history.replaceState(history.state, "", location.pathname);
+      writeBtn.current?.click();
+    }, 0);
+    return () => clearTimeout(t);
+  }, []);
+
+  const changeMenu = (value: string) => router.push(value === "" ? "/reviews" : `/product/${value}/reviews`);
 
   return (
-    <>
-      <div className="rv-layout">
-        <aside className="rv-sum" ref={sumRef} aria-label="평점 요약">
-          <span className="small-label">CUSTOMER RATING</span>
-          <div className="rating-score">
-            <strong>{s.avg.toFixed(1)}</strong>
-            <span>/ 5</span>
+    <div className="rv">
+      <div className="rv-head">
+        <div>
+          <span className="eyebrow">CUSTOMER REVIEWS</span>
+          <PageHeading>{product ? <>{product.name} <span>리뷰</span></> : "고객 리뷰"}</PageHeading>
+        </div>
+        <button type="button" ref={writeBtn} className="primary rv-write-btn" onClick={write}>
+          리뷰 쓰기
+        </button>
+      </div>
+
+      <section className={`rv-sum${product ? " has-product" : ""}`} aria-label="평점 요약">
+        <div className="rv-score">
+          <strong>{s.avg.toFixed(1)}</strong>
+          <div>
+            <StarRating avg={s.avg} />
+            <p>리뷰 {s.n}개</p>
           </div>
-          <StarRating avg={s.avg} />
-          <p>리뷰 {s.n}개 기준</p>
-          <ul className="dist">
-            {[5, 4, 3, 2, 1].map((k) => (
-              <li key={k}>
-                <button
-                  type="button"
-                  className="dist-row"
-                  aria-pressed={star === k}
-                  aria-label={`${k}점 리뷰 ${s.dist[k]}개만 보기`}
-                  onClick={() => pickStar(k)}
-                >
-                  <span>{k}점</span>
-                  <i>
-                    <b style={{ width: `${s.n ? ((s.dist[k] / s.n) * 100).toFixed(1) : 0}%` }} />
-                  </i>
-                  <em>{s.dist[k]}</em>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </aside>
-        <div className="rv-main">
-          <div className="rv-toolbar">
-            <span aria-live="polite">
-              {star === null ? `총 ${list.length}개` : `${star}점 리뷰 ${list.length}개`} · {visible.length}개 표시
-            </span>
-            <div className="rv-tools">
-              <label className="rv-sort">
-                <span className="sr-only">정렬</span>
-                <select
-                  value={sort}
-                  onChange={(e) => {
-                    setSort(e.target.value as SortKey);
-                    setShown(PAGE);
-                  }}
-                >
-                  {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
-                    <option key={k} value={k}>
-                      {SORT_LABELS[k]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <a className="rs-link" href="#write" onClick={scrollToForm}>
-                리뷰 쓰기
-              </a>
-            </div>
-          </div>
-          <div className="rv-stars" role="group" aria-label="별점별 걸러 보기">
-            <button type="button" aria-pressed={star === null} onClick={() => pickStar(null)}>
-              전체 {s.n}
-            </button>
-            {[5, 4, 3, 2, 1].map((k) => (
-              <button key={k} type="button" aria-pressed={star === k} onClick={() => pickStar(k)}>
-                ★ {k}점 {s.dist[k]}
-              </button>
-            ))}
-          </div>
-          <div className="review-cards rv-list" ref={listRef}>
-            {visible.map((r) => (
-              <ReviewCard key={r.id} review={r} />
-            ))}
-          </div>
-          {list.length === 0 && (
-            <p className="empty rv-empty">
-              아직 {star}점 리뷰가 없어요.{" "}
-              <button type="button" className="text-link" onClick={() => pickStar(null)}>
-                전체 리뷰 보기
-              </button>
-            </p>
-          )}
-          {visible.length < list.length && (
-            <div className="rv-more">
+        </div>
+        <ul className="dist" aria-label="별점별 걸러 보기">
+          {[5, 4, 3, 2, 1].map((k) => (
+            <li key={k}>
               <button
                 type="button"
-                className="ghost-btn"
-                onClick={() => {
-                  focusFrom.current = visible.length;
-                  setShown((n) => n + PAGE);
-                }}
+                className="dist-row"
+                aria-pressed={star === k}
+                aria-label={`${k}점 리뷰 ${s.dist[k]}개만 보기`}
+                onClick={() => pickStar(k)}
               >
-                리뷰 더보기
+                <span>{k}점</span>
+                <i>
+                  <b style={{ width: `${s.n ? ((s.dist[k] / s.n) * 100).toFixed(1) : 0}%` }} />
+                </i>
+                <em>{s.dist[k]}</em>
               </button>
-            </div>
+            </li>
+          ))}
+        </ul>
+        {product && (
+          <Link className="rv-product" href={`/product/${product.id}`}>
+            <span className="rv-thumb">
+              <FoodImage id={product.id} sizes="64px" preload />
+            </span>
+            <span>
+              <b>{product.name}</b>
+              {money(product.price)}
+              <i>메뉴 보기 →</i>
+            </span>
+          </Link>
+        )}
+      </section>
+
+      <div className="rv-toolbar" ref={toolbarRef}>
+        <label className="rv-menu">
+          <span>메뉴</span>
+          <select value={pid ?? ""} onChange={(e) => changeMenu(e.target.value)}>
+            <option value="">전체 메뉴</option>
+            {PRODUCTS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {star !== null && (
+          <button type="button" className="rv-filter" onClick={() => pickStar(null)} aria-label={`${star}점 필터 해제`}>
+            ★ {star}점 <span aria-hidden="true">✕</span>
+          </button>
+        )}
+        <span className="rv-count" aria-live="polite">
+          {list.length}개
+        </span>
+        <label className="rv-sort">
+          <span className="sr-only">정렬</span>
+          <select
+            value={sort}
+            onChange={(e) => {
+              setSort(e.target.value as SortKey);
+              setShown(PAGE);
+            }}
+          >
+            {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+              <option key={k} value={k}>
+                {SORT_LABELS[k]}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {list.length > 0 ? (
+        <ol className="rv-list" ref={listRef}>
+          {visible.map((r) => (
+            <ReviewItem key={r.id} review={r} showMenu={pid === null} />
+          ))}
+        </ol>
+      ) : (
+        <div className="empty rv-empty">
+          {star !== null ? (
+            <>
+              아직 {star}점 리뷰가 없어요.
+              <button type="button" className="ghost-btn" onClick={() => pickStar(null)}>
+                필터 해제
+              </button>
+            </>
+          ) : (
+            <>
+              아직 리뷰가 없어요. 첫 리뷰를 남겨주세요.
+              <button type="button" className="ghost-btn" onClick={write}>
+                리뷰 쓰기
+              </button>
+            </>
           )}
         </div>
-      </div>
-      <ReviewForm
-        id={id}
-        name={name}
-        onAdded={() => {
-          setSort("new");
-          setStar(null);
-          setShown(PAGE);
-          sumRef.current?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
-        }}
-      />
-    </>
+      )}
+
+      {visible.length < list.length && (
+        <div className="rv-more">
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={() => {
+              focusFrom.current = visible.length;
+              setShown((n) => n + PAGE);
+            }}
+          >
+            리뷰 더 보기 <span>({visible.length} / {list.length})</span>
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
