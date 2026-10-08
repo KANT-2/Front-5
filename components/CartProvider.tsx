@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createLocalStore } from "@/lib/local-store";
-import { isCustom } from "@/lib/cart";
+import { isCustom, selectionKey } from "@/lib/cart";
 import { CART_KEY, loadCart, saveCart, type CartItem, type CustomItem, type MenuItem } from "@/lib/storage";
 
 const EMPTY: CartItem[] = [];
@@ -45,7 +45,7 @@ export default function CartProvider({ children }: { children: React.ReactNode }
   const add = useCallback((item: MenuItem) => {
     const drinks = [...item.drinks].sort((a, b) => a - b);
     const list = store.getSnapshot();
-    const at = list.findIndex((i) => !isCustom(i) && i.id === item.id && i.dressing === item.dressing && sameDrinks(i.drinks, drinks));
+    const at = list.findIndex((i) => !isCustom(i) && i.id === item.id && i.dressing === item.dressing && sameDrinks(i.drinks, drinks) && selectionKey(i.optionSelections)===selectionKey(item.optionSelections));
     if (at >= 0) store.set(list.map((i, n) => (n === at ? { ...i, qty: clampQty(i.qty + item.qty) } : i)));
     else store.set([...list, { ...item, drinks, qty: clampQty(item.qty) }]);
   }, []);

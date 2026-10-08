@@ -3,6 +3,7 @@ export type SortKey = "new" | "high" | "low";
 
 export interface Review {
   id: string;
+  images?: string[];
   pid: number;
   author: string;
   stars: number;

@@ -21,6 +21,7 @@ export default function ReviewForm({ id, name, onAdded }: Props) {
   const [nick, setNick] = useState("");
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
+  const [saving,setSaving]=useState(false);
   const [msg, setMsg] = useState("");
   const section = useRef<HTMLElement>(null);
   const firstStar = useRef<HTMLInputElement>(null);
@@ -37,8 +38,9 @@ export default function ReviewForm({ id, name, onAdded }: Props) {
     return () => clearTimeout(t);
   }, []);
 
-  const submit = (e: React.FormEvent<HTMLFormElement>) => {
+  const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if(saving)return;
     const tTitle = title.trim();
     const tText = text.trim();
     const tNick = nick.trim();
@@ -57,8 +59,9 @@ export default function ReviewForm({ id, name, onAdded }: Props) {
       return;
     }
     const now = Date.now();
-    addReview({
-      id: "u" + now,
+    setSaving(true);
+    try { await addReview({
+      id: crypto.randomUUID(),
       pid: id,
       author: tNick ? [...tNick][0] + "**" : "익명",
       stars,
@@ -70,6 +73,7 @@ export default function ReviewForm({ id, name, onAdded }: Props) {
       sample: false,
       mine: true,
     });
+    } catch(e) {setMsg((e as Error).message);return;} finally {setSaving(false);}
     setMsg("");
     setStars(0);
     setHover(0);
@@ -128,7 +132,7 @@ export default function ReviewForm({ id, name, onAdded }: Props) {
         <p className="rv-msg" role="alert">
           {msg}
         </p>
-        <button className="primary" type="submit">
+        <button className="primary" type="submit" disabled={saving}>
           리뷰 등록하기 <span>↗</span>
         </button>
       </form>

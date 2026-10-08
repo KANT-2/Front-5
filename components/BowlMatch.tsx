@@ -1,5 +1,6 @@
 "use client";
 
+import { useCustomerCatalog } from "./CustomerCatalogProvider";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -23,7 +24,7 @@ import {
   recipeStore,
   type Decision,
 } from "@/lib/match";
-import { DRESSINGS, PRODUCTS, money, photoSrc } from "@/lib/products";
+import { money} from "@/lib/products";
 
 const two = (n: number) => String(n).padStart(2, "0");
 /** 카드를 넘길 때 옆으로 날아가는 거리(px)와 기울기(도) */
@@ -57,7 +58,7 @@ function CardFace({
         <span className="category">{item.group}</span>
         <Image
           className="ingredient-photo"
-          src={ingredientPhoto(item.id)}
+          src={item.image || ingredientPhoto(item.id)}
           alt={item.name}
           width={1254}
           height={1254}
@@ -134,11 +135,13 @@ function DoneCard({
  * 재료 카드를 좌우로 넘겨 나만의 샐러드를 만드는 화면 (예전 public/bowl-match 정적 페이지를 옮김).
  * 선택 기록과 저장한 조합은 예전과 같은 localStorage 키(bm-decisions, bm-recipe)를 쓴다.
  */
-export default function BowlMatch({
-  ingredients,
-}: {
-  ingredients: Ingredient[];
-}) {
+export default function BowlMatch() {
+  const { ingredients,revision,visibleProducts,DRESSINGS }=useCustomerCatalog();
+  if(!ingredients.length||!visibleProducts.length||!DRESSINGS.some(d=>d.available))return <p role="status">현재 조합할 수 있는 재료와 메뉴를 준비 중입니다.</p>;
+  return <BowlMatchBody key={revision} ingredients={ingredients}/>;
+}
+function BowlMatchBody({ingredients}:{ingredients:Ingredient[]}) {
+  const { DRESSINGS, PRODUCTS, photoSrc } = useCustomerCatalog();
   const { addCustom, open } = useCart();
   const toast = useToast();
   const reduced = useReducedMotion();
@@ -155,13 +158,14 @@ export default function BowlMatch({
     recipeStore.getServerSnapshot,
   );
   // 재료 목록이 줄어든 경우를 위해 지금 목록 길이까지만 쓴다.
-  const decisions = saved.length > total ? saved.slice(0, total) : saved;
+  const invalid=saved.findIndex(d=>d.ingredientId&&d.ingredientId!==ingredients[d.index]?.id);
+  const decisions=saved.slice(0,invalid<0?total:invalid);
   const idx = decisions.length;
   const item = ingredients[idx];
   const next = ingredients[idx + 1];
   const selected = decisions
     .filter((d) => d.liked)
-    .map((d) => ingredients[d.index]);
+    .map((d) => ingredients[d.index]).filter(Boolean);
   const ids = selected.map((i) => i.id);
   const price = bowlPrice(selected);
   const savedRecipe =
@@ -189,7 +193,7 @@ export default function BowlMatch({
 
   const [resultOpen, setResultOpen] = useState(false);
   const [name, setName] = useState("");
-  const [dressing, setDressing] = useState(0);
+  const [dressing, setDressing] = useState(Math.max(0,DRESSINGS.findIndex(d=>d.available)));
   const [savedNote, setSavedNote] = useState("");
   const dialogRef = useRef<HTMLDialogElement>(null);
   const makeBtn = useRef<HTMLButtonElement>(null);
@@ -260,7 +264,7 @@ export default function BowlMatch({
       c.removeEventListener("transitionend", onEnd);
       clearTimeout(fallback);
       const now = decisionsStore.getSnapshot().slice(0, idx);
-      setDecisions([...now, { index: idx, liked }]);
+      setDecisions([...now, { index: idx, liked, ingredientId: ingredients[idx].id }]);
       lock(false);
     };
     const onEnd = (e: TransitionEvent) => {
@@ -407,7 +411,7 @@ export default function BowlMatch({
   const loadRecipe = () => {
     if (busyRef.current || !savedRecipe) return;
     const list = ingredients.map((i, index) => ({
-      index,
+      index,ingredientId:i.id,
       liked: savedRecipe.ingredients.includes(i.id),
     }));
     setDecisions(list);
@@ -434,22 +438,24 @@ export default function BowlMatch({
   };
 
   const addToCart = () => {
+    if(!DRESSINGS[dressing]?.available){toast("선택한 드레싱이 품절되었습니다. 다른 드레싱을 선택해주세요.");return;}
     addCustom({
       name: recipeName(),
+      ingredientIds: selected.map((i)=>i.id),
       ingredients: selected.map((i) => i.name),
       allergens: unique(selected.flatMap((i) => i.allergens)),
       dressing,
       price,
-      photo: matchProduct(ids),
+      photo: similar.id,
     });
     dialogRef.current?.close();
     open(makeBtn.current);
   };
 
-  const similar = PRODUCTS[matchProduct(ids)];
+  const similar = PRODUCTS.find(p=>p?.id===matchProduct(ids)&&p.status==='active') ?? PRODUCTS.find(p=>p?.status==='active') ?? PRODUCTS.find(p=>p?.status!=='hidden')!;
   const resultAllergens = unique([
     ...selected.flatMap((i) => i.allergens),
-    ...DRESSINGS[dressing].allergens,
+    ...DRESSINGS[dressing]?.allergens ?? [],
   ]);
 
   return (
