@@ -46,8 +46,6 @@ export default function OrderSuccessDialog({ order, onClosed }: { order: OrderSu
           </p>
           <p className="demo-note">
             선택 항목의 주요 알레르기: {order.allergens.join(", ") || "표기 대상 없음"}
-            <br />
-            체험이 완료되었습니다. 실제 주문·결제는 발생하지 않습니다.
           </p>
           <button type="button" className="primary full" onClick={() => ref.current?.close()}>
             계속 둘러보기

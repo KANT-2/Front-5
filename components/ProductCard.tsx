@@ -12,7 +12,7 @@ export const CARD_SIZES = "(max-width: 600px) 50vw, (max-width: 1240px) 25vw, 30
  * 메뉴 카드. 제품명 링크가 카드 전체를 덮어(::after) 어디를 눌러도 상세로 가고,
  * "+" 버튼만 그 위에 올라가 기본 옵션(첫 번째 드레싱, 음료 없음, 1개)으로 바로 담고 장바구니를 연다.
  */
-export default function ProductCard({ product: p }: { product: Product }) {
+export default function ProductCard({ product: p, eager = false }: { product: Product; eager?: boolean }) {
   const s = useReviews().statsFor(p.id);
   const { add, open } = useCart();
 
@@ -24,7 +24,7 @@ export default function ProductCard({ product: p }: { product: Product }) {
   return (
     <div className="product">
       <div className="product-photo">
-        <FoodImage id={p.id} sizes={CARD_SIZES} />
+        <FoodImage id={p.id} sizes={CARD_SIZES} eager={eager} />
         {p.tag && <span className="product-tag">{p.tag}</span>}
         <button
           type="button"
