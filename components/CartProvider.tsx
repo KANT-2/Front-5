@@ -5,7 +5,6 @@ import { createLocalStore } from "@/lib/local-store";
 import { isCustom } from "@/lib/cart";
 import { CART_KEY, loadCart, saveCart, type CartItem, type MenuItem } from "@/lib/storage";
 
-export type FulfillmentMode = "pickup" | "delivery";
 
 const EMPTY: CartItem[] = [];
 const store = createLocalStore<CartItem[]>(CART_KEY, loadCart, saveCart, EMPTY);
@@ -23,8 +22,6 @@ interface CartContextValue {
   open: (opener?: HTMLElement | null) => void;
   /** returnFocus=false 이면 열었던 버튼으로 포커스를 돌려주지 않는다 (주문 완료 등). */
   close: (returnFocus?: boolean) => void;
-  mode: FulfillmentMode;
-  setMode: (mode: FulfillmentMode) => void;
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -44,7 +41,6 @@ export default function CartProvider({ children }: { children: React.ReactNode }
   const items = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
   const [isOpen, setIsOpen] = useState(false);
   const [openedAt, setOpenedAt] = useState<number | null>(null);
-  const [mode, setMode] = useState<FulfillmentMode>("pickup");
   const opener = useRef<HTMLElement | null>(null);
 
   const add = useCallback((item: MenuItem) => {
@@ -95,8 +91,8 @@ export default function CartProvider({ children }: { children: React.ReactNode }
   const count = items.reduce((n, i) => n + i.qty, 0);
 
   const value = useMemo(
-    () => ({ items, count, add, update, remove, clear, isOpen, openedAt, open, close, mode, setMode }),
-    [items, count, add, update, remove, clear, isOpen, openedAt, open, close, mode],
+    () => ({ items, count, add, update, remove, clear, isOpen, openedAt, open, close }),
+    [items, count, add, update, remove, clear, isOpen, openedAt, open, close],
   );
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

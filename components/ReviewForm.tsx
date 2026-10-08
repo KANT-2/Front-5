@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useReviews } from "./ReviewsProvider";
 import { useToast } from "./ToastProvider";
-import { RATE_LABELS, dateStr, type Via } from "@/lib/reviews";
+import { RATE_LABELS, dateStr } from "@/lib/reviews";
 
 const len = (s: string) => [...s].length;
 
@@ -19,7 +19,6 @@ export default function ReviewForm({ id, name, onAdded }: Props) {
   const [stars, setStars] = useState(0);
   const [hover, setHover] = useState(0);
   const [nick, setNick] = useState("");
-  const [via, setVia] = useState<Via>("pickup");
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [msg, setMsg] = useState("");
@@ -66,7 +65,7 @@ export default function ReviewForm({ id, name, onAdded }: Props) {
       title: tTitle,
       text: tText,
       date: dateStr(now),
-      via,
+      via: "delivery",
       t: now,
       sample: false,
       mine: true,
@@ -75,7 +74,6 @@ export default function ReviewForm({ id, name, onAdded }: Props) {
     setStars(0);
     setHover(0);
     setNick("");
-    setVia("pickup");
     setTitle("");
     setText("");
     toast("리뷰가 등록되었어요");
@@ -105,19 +103,10 @@ export default function ReviewForm({ id, name, onAdded }: Props) {
           </div>
           <em>{stars ? RATE_LABELS[stars] : "선택해주세요"}</em>
         </fieldset>
-        <div className="two-fields">
-          <label className="field">
-            <span>닉네임</span>
-            <input name="nick" maxLength={10} placeholder="예: 샐러드러버" autoComplete="nickname" value={nick} onChange={(e) => setNick(e.target.value)} />
-          </label>
-          <label className="field">
-            <span>이용 방식</span>
-            <select name="via" value={via} onChange={(e) => setVia(e.target.value === "delivery" ? "delivery" : "pickup")}>
-              <option value="pickup">매장 픽업</option>
-              <option value="delivery">예약 배달</option>
-            </select>
-          </label>
-        </div>
+        <label className="field">
+          <span>닉네임</span>
+          <input name="nick" maxLength={10} placeholder="예: 샐러드러버" autoComplete="nickname" value={nick} onChange={(e) => setNick(e.target.value)} />
+        </label>
         <label className="field">
           <span>제목</span>
           <input ref={titleRef} name="title" maxLength={30} placeholder="한 줄로 요약해주세요 (2~30자)" value={title} onChange={(e) => setTitle(e.target.value)} />
