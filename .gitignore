@@ -44,6 +44,3 @@ next-env.d.ts
 /.deploy/
 __pycache__/
 *.py[cod]
-
-# Admin runtime data
-.data/

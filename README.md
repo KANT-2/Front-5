@@ -52,13 +52,3 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-
-
-## 관리자 페이지
-
-`/admin`: 메뉴, 옵션, bowl match 재료, 고객 화면 문구/시즌, 리뷰, 매장 위치 관리.
-`/admin/preview`: 관리자 저장 데이터로 구성한 고객 미리보기.
-기존 고객 홈페이지(`/`)와 관리자 페이지는 각각 별도 루트 레이아웃을 사용한다.
-관리자 데이터는 서버의 `.data/admin`에 저장한다. 배포 시 `ADMIN_DATA_DIR`을 고정 경로로 지정한다.
-고객 사이트의 기존 정적 상품/localStorage 리뷰를 관리자 API에 연결하는 작업은 아직 별도다.
-자세한 통합 범위와 검증은 `docs/admin-integration.md`를 참고한다.
