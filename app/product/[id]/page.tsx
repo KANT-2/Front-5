@@ -40,7 +40,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[id]">
           <span className="eyebrow">YOUR DAILY BOWL · {p.en}</span>
           <PageHeading>{p.name}</PageHeading>
           <ProductRating id={p.id} />
-          <p className="pv-desc">{p.desc}</p>
+          <p className="pv-desc">{p.description}</p>
           <strong className="pv-price">{money(p.price)}</strong>
           <dl className="pv-meta">
             <dt>구성</dt>
