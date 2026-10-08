@@ -1,0 +1,17 @@
+const PRODUCTS=[
+{id:0,name:'레몬 치킨 아보카도',en:'Lemon chicken avocado',desc:'그릴 치킨, 잘 익은 아보카도, 상큼한 레몬의 조합',price:10900,tag:'BEST',category:'protein',allergens:['닭고기'],ingredients:'로메인 · 치킨 · 아보카도 · 퀴노아 · 토마토'},
+{id:1,name:'연어 아보카도',en:'Salmon avocado',desc:'부드러운 구운 연어와 아보카도의 든든한 한 끼',price:13900,tag:'BEST',category:'protein',allergens:['연어'],ingredients:'로메인 · 연어 · 아보카도 · 오이'},
+{id:2,name:'쉬림프 망고',en:'Shrimp mango',desc:'탱글한 새우와 달콤한 망고의 산뜻한 만남',price:11900,tag:'BEST',category:'protein',allergens:['새우'],ingredients:'로메인 · 새우 · 망고 · 방울토마토'},
+{id:3,name:'두부 퀴노아',en:'Tofu quinoa',desc:'고소한 구운 두부에 알알이 채운 퀴노아',price:9900,tag:'PLANT',category:'vegan',allergens:['대두'],ingredients:'두부 · 퀴노아 · 양배추 · 에다마메'},
+{id:4,name:'그릭 페타',en:'Greek feta',desc:'페타 치즈와 올리브, 토마토로 담은 지중해',price:10900,category:'other',allergens:['우유'],ingredients:'페타 · 토마토 · 오이 · 올리브'},
+{id:5,name:'스테이크 케일',en:'Steak kale',desc:'풍미 깊은 스테이크와 아삭한 케일',price:14900,category:'protein',allergens:['쇠고기','우유'],ingredients:'스테이크 · 케일 · 파르메산 · 토마토'},
+{id:6,name:'튜나 스위트콘',en:'Tuna sweet corn',desc:'담백한 참치와 달콤한 옥수수',price:9900,category:'protein',allergens:['참치'],ingredients:'참치 · 옥수수 · 양파 · 오이'},
+{id:7,name:'클래식 치킨 시저',en:'Classic chicken Caesar',desc:'바삭한 크루통과 치킨, 언제나 좋은 클래식',price:10900,category:'protein',allergens:['닭고기','우유','밀','계란','생선'],ingredients:'치킨 · 로메인 · 크루통 · 파르메산'},
+{id:8,name:'머쉬룸 그레인',en:'Mushroom grain',desc:'향긋한 구운 버섯과 고소한 통곡물',price:9900,category:'vegan',allergens:['밀'],ingredients:'버섯 · 현미 · 보리 · 루콜라'},
+{id:9,name:'부라타 가든',en:'Burrata garden',desc:'부드러운 부라타에 토마토와 루콜라를 더해',price:12900,tag:'PICK',category:'other',allergens:['우유'],ingredients:'부라타 · 토마토 · 루콜라 · 바질'},
+{id:10,name:'지중해 칙피 크런치 세트',en:'Chickpea crunch set',desc:'유행하는 칙피 조합 + 오렌지 주스 1잔 포함',price:13900,tag:'NEW',category:'new',allergens:[],ingredients:'병아리콩 · 오이 · 허브 · 토마토 · 오렌지 주스'},
+{id:11,name:'스파이시 멕시칸 세트',en:'Spicy Mexican set',desc:'매콤한 치킨 아보카도 조합 + 아메리카노 1잔 포함',price:14900,tag:'NEW',category:'new',allergens:['닭고기'],ingredients:'치킨 · 아보카도 · 블랙빈 · 옥수수 · 커피'}];
+const DRESSINGS=[{name:'레몬 올리브',allergens:[]},{name:'발사믹',allergens:[]},{name:'참깨',allergens:['대두','밀','참깨']},{name:'시저',allergens:['우유','계란','생선']},{name:'드레싱 없이',allergens:[]}];
+const DRINKS=[{name:'아이스 아메리카노',price:3000},{name:'오렌지 주스',price:4000},{name:'사과 주스',price:4000},{name:'케일 그린 주스',price:4500}];
+function money(v){return v.toLocaleString('ko-KR')+'원'}
+function photo(id,cls=''){return `<img class="food-image ${cls}" src="assets/salad-${String(id).padStart(2,'0')}-cutout.png" alt="${PRODUCTS[id].name}" width="1024" height="1024" loading="lazy" decoding="async">`}

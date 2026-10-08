@@ -1,26 +1,28 @@
-@import "tailwindcss";
+/*
+ * Tailwind 의 테마·유틸리티만 불러오고 Preflight(리셋)는 쓰지 않는다.
+ * 화면 스타일은 참고 디자인(leaf-bowl-v2)을 옮긴 app/styles/*.css 가 담당한다.
+ */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme static {
+  --color-brand: #194b38;
+  --color-lime: #d6ed83;
+  --color-ink: #233d31;
+  --color-muted: #7b8674;
+  --color-pale: #e8eddf;
+  --color-line: #d6dfd1;
+  --color-cream: #f8f6ef;
+  --color-soft: #ecf1df;
+  --color-soft-2: #e9eedf;
+  --color-focus: #81a951;
+  --font-sans: Pretendard, "Noto Sans KR", Arial, sans-serif;
+  --font-serif: Georgia, serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
+@import "./styles/base.css";
+@import "./styles/home.css";
+@import "./styles/product.css";
+@import "./styles/reviews.css";
+@import "./styles/cart.css";
