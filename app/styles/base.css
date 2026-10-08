@@ -102,10 +102,6 @@ dialog p { color: #687863; line-height: 1.8; }
 .success-icon { margin: 15px auto 20px; width: 60px; height: 60px; border-radius: 50%; background: var(--color-soft); color: var(--color-brand); font-size: 30px; display: grid; place-items: center; }
 .dialog-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
 .close { width: 32px; height: 32px; background: var(--color-pale); border-radius: 50%; font-size: 23px; line-height: 1; }
-.segmented { display: flex; gap: 8px; padding: 0; border-radius: 7px; background: transparent; }
-.segmented button { padding: 12px 17px; border-radius: 5px; font-size: 15px; font-weight: 400; border: 1px solid #d0dbcb; background: transparent; color: var(--color-ink); line-height: 1.5; text-align: left; }
-.segmented button small { display: block; font-size: 13px; color: #637561; margin-top: 5px; }
-.segmented .active { background: var(--color-soft); border-color: #78905f; color: var(--color-ink); }
 .field { display: block; margin: 18px 0 0; font-size: 12px; }
 .field > span { display: block; margin-bottom: 8px; font-weight: 600; }
 .field input, .field select { width: 100%; padding: 13px; border: 1px solid #bccdb0; border-radius: 6px; color: var(--color-ink); background: #fff; }

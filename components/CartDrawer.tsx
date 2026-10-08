@@ -2,19 +2,16 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { useCart, type FulfillmentMode } from "./CartProvider";
+import { useCart } from "./CartProvider";
 import FoodImage from "./FoodImage";
 import OrderSuccessDialog, { type OrderSummary } from "./OrderSuccessDialog";
 import { useToast } from "./ToastProvider";
+import type { DeliveryHours } from "@/lib/data/delivery";
 import { isCustom, itemAllergens, itemKey, itemName, itemOptions, itemUnitPrice } from "@/lib/cart";
 import {
   DELIVERY_AREA_LABEL,
   FREE_DELIVERY_FROM,
   MIN_DELIVERY_ORDER,
-  STORE_AREA,
-  STORE_HOURS,
-  STORE_NAME,
-  STORE_PREP,
   deliveryFee,
   inDeliveryArea,
   money,
@@ -35,10 +32,10 @@ interface TimeOption {
   label: string;
 }
 
-/** 10:00~21:00 한 시간 단위 중 지금부터 30분 이후에 시작하는 시간대만. */
-function timeOptions(day: string, now: number): TimeOption[] {
+/** 배달 운영 시간 안의 한 시간 단위 중 지금부터 30분 이후에 시작하는 시간대만. */
+function timeOptions(day: string, now: number, { open, close }: DeliveryHours): TimeOption[] {
   const list: TimeOption[] = [];
-  for (let h = 10; h < 21; h++) {
+  for (let h = open; h < close; h++) {
     const start = `${pad(h)}:00`;
     const end = `${pad(h + 1)}:00`;
     if (new Date(`${day}T${start}`).getTime() > now + 30 * 60000) list.push({ value: start, label: `${start}–${end}` });
@@ -46,7 +43,7 @@ function timeOptions(day: string, now: number): TimeOption[] {
   return list;
 }
 
-export default function CartDrawer() {
+export default function CartDrawer({ hours }: { hours: DeliveryHours }) {
   const { isOpen, openedAt, close } = useCart();
   const drawer = useRef<HTMLElement>(null);
   const closeBtn = useRef<HTMLButtonElement>(null);
@@ -99,7 +96,7 @@ export default function CartDrawer() {
         aria-hidden={!isOpen}
         inert={!isOpen}
       >
-        {openedAt !== null && <CartBody openedAt={openedAt} closeBtn={closeBtn} onOrdered={setOrder} />}
+        {openedAt !== null && <CartBody openedAt={openedAt} hours={hours} closeBtn={closeBtn} onOrdered={setOrder} />}
       </aside>
       <OrderSuccessDialog order={order} onClosed={() => setOrder(null)} />
     </>
@@ -108,12 +105,13 @@ export default function CartDrawer() {
 
 interface BodyProps {
   openedAt: number;
+  hours: DeliveryHours;
   closeBtn: React.RefObject<HTMLButtonElement | null>;
   onOrdered: (order: OrderSummary) => void;
 }
 
-function CartBody({ openedAt, closeBtn, onOrdered }: BodyProps) {
-  const { items, count, update, remove, clear, close, mode, setMode } = useCart();
+function CartBody({ openedAt, hours, closeBtn, onOrdered }: BodyProps) {
+  const { items, count, update, remove, clear, close } = useCart();
   const toast = useToast();
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
@@ -124,14 +122,13 @@ function CartBody({ openedAt, closeBtn, onOrdered }: BodyProps) {
   const minDate = dateValue(openedAt, 0);
   const maxDate = dateValue(openedAt, 14);
   const day = date >= minDate && date <= maxDate ? date : dateValue(openedAt, 1);
-  const options = timeOptions(day, openedAt);
+  const options = timeOptions(day, openedAt, hours);
   const slot = options.find((o) => o.value === time) ?? options[0];
 
   const subtotal = items.reduce((n, i) => n + itemUnitPrice(i) * i.qty, 0);
-  const delivery = mode === "delivery";
-  const fee = delivery && items.length ? deliveryFee(subtotal) : 0;
+  const fee = items.length ? deliveryFee(subtotal) : 0;
   // 배달 주문이 안 되는 이유 (없으면 빈 문자열)
-  const deliveryIssue = !delivery || !items.length
+  const deliveryIssue = !items.length
     ? ""
     : subtotal < MIN_DELIVERY_ORDER
       ? `배달은 ${money(MIN_DELIVERY_ORDER)} 이상부터 가능해요. ${money(MIN_DELIVERY_ORDER - subtotal)} 더 담아주세요.`
@@ -161,7 +158,7 @@ function CartBody({ openedAt, closeBtn, onOrdered }: BodyProps) {
       return;
     }
     onOrdered({
-      summary: `${day} ${slot.label} · ${mode === "pickup" ? `${STORE_NAME} 픽업` : "예약 배달"}`,
+      summary: `${day} ${slot.label} · 예약 배달`,
       total: subtotal + fee,
       allergens: [...new Set(items.flatMap(itemAllergens))],
     });
@@ -169,12 +166,6 @@ function CartBody({ openedAt, closeBtn, onOrdered }: BodyProps) {
     clear();
     setAck(false);
   };
-
-  const modeButton = (m: FulfillmentMode, label: string) => (
-    <button type="button" className={mode === m ? "active" : ""} aria-pressed={mode === m} onClick={() => setMode(m)}>
-      {label}
-    </button>
-  );
 
   return (
     <>
@@ -238,35 +229,20 @@ function CartBody({ openedAt, closeBtn, onOrdered }: BodyProps) {
           <br />
           신선한 한 그릇을 골라보세요.
           <br />
-          <Link className="primary" href="/#menu" onClick={() => close(false)}>
+          <Link className="primary" href="/menu" onClick={() => close(false)}>
             메뉴 보러 가기 <span>↗</span>
           </Link>
         </div>
       )}
-      <div className="segmented drawer-modes">
-        {modeButton("pickup", "⌖ 매장 픽업")}
-        {modeButton("delivery", "↗ 예약 배달")}
-      </div>
       <form onSubmit={submit}>
-        {mode === "pickup" ? (
-          <div className="field">
-            <span>픽업 매장</span>
-            <p className="field-static">
-              {STORE_NAME} (가상 매장)
-              <small>
-                {STORE_AREA} · {STORE_HOURS} · {STORE_PREP}
-              </small>
-            </p>
-          </div>
-        ) : (
-          <label className="field">
+        <label className="field">
             <span>배달 주소</span>
             <input
               name="address"
               required
               minLength={2}
               maxLength={150}
-              placeholder="체험용 주소를 입력해주세요"
+              placeholder="배달 주소를 입력해주세요"
               autoComplete="street-address"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
@@ -275,7 +251,6 @@ function CartBody({ openedAt, closeBtn, onOrdered }: BodyProps) {
               배달 가능 {DELIVERY_AREA_LABEL} · 최소 주문 {money(MIN_DELIVERY_ORDER)} · {money(FREE_DELIVERY_FROM)} 이상 무료배달
             </small>
           </label>
-        )}
         <div className="two-fields">
           <label className="field">
             <span>받을 날짜</span>
@@ -302,10 +277,10 @@ function CartBody({ openedAt, closeBtn, onOrdered }: BodyProps) {
             <span>{money(subtotal)}</span>
           </div>
           <div>
-            <span>{mode === "pickup" ? "픽업" : "배달비"}</span>
-            <span>{mode === "pickup" ? "무료" : fee === 0 && items.length ? "무료" : money(fee)}</span>
+            <span>배달비</span>
+            <span>{fee === 0 && items.length ? "무료" : money(fee)}</span>
           </div>
-          {delivery && items.length > 0 && fee > 0 && (
+          {items.length > 0 && fee > 0 && (
             <p className="free-hint">{money(FREE_DELIVERY_FROM - subtotal)} 더 담으면 무료배달이에요.</p>
           )}
           <div className="total">
@@ -325,7 +300,6 @@ function CartBody({ openedAt, closeBtn, onOrdered }: BodyProps) {
         <button className="primary full" type="submit" disabled={!items.length || !!deliveryIssue}>
           체험 주문 완료하기 →
         </button>
-        <p className="demo-note">체험용 주문입니다. 결제하거나 매장에 전송하지 않습니다.</p>
       </form>
     </>
   );
