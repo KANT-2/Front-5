@@ -3,6 +3,7 @@ export type SortKey = "new" | "high" | "low";
 
 export interface Review {
   id: string;
+  images?: string[];
   pid: number;
   author: string;
   stars: number;
@@ -72,6 +73,11 @@ export const SORTERS: Record<SortKey, (a: Review, b: Review) => number> = {
 /** 내가 쓴 리뷰를 앞에 두고 예시 리뷰를 이어 붙인다. */
 export function reviewsOf(pid: number, userReviews: Review[]): Review[] {
   return [...userReviews.filter((r) => r.pid === pid), ...(REVIEWS_SEED[pid] ?? [])];
+}
+
+/** 모든 메뉴의 리뷰. 내가 쓴 리뷰를 앞에 둔다. */
+export function allReviewsOf(userReviews: Review[]): Review[] {
+  return [...userReviews, ...Object.values(REVIEWS_SEED).flat()];
 }
 
 export function statsOf(list: Review[]): ReviewStats {

@@ -24,6 +24,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 | `chore/이슈번호-작업명` | 설정·문서·의존성 변경 | `main` | `main` |
 | `hotfix/이슈번호-수정명` | 운영 긴급 수정 | `production` | `production` |
 
+작업 브랜치 이름은 위 형식을 권장하되 강제하지 않는다. GitHub 규칙이나 CI로
+작업 브랜치의 이름·접두사·이슈 번호를 검증하지 않는다.
+
 ### 일반 개발·배포 흐름
 
 1. 최신 `main`에서 작업 브랜치를 생성한다. 예: `feat/12-login`.
@@ -32,7 +35,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 4. 배포할 변경이 모두 검증되면 `main → production` 배포 PR을 생성한다.
 5. 배포 PR은 **Merge commit**으로 병합하고 운영 배포한다.
 6. 배포 성공 후 해당 운영 커밋에 `v0.1.0` 같은 버전 태그를 붙인다.
-7. `production → main` 동기화 PR을 **Merge commit**으로 병합해 배포 이력을 맞춘다.
+7. 관리자가 `production → main` 동기화 PR에서 `main`의 병합 방식 규칙만 우회하여
+   **Merge commit**으로 병합해 배포 이력을 맞춘다. 일반 배포 동기화의 리뷰 승인은 유지한다.
 
 배포 시점의 `main` 전체가 배포 대상이다. 배포 검증 중에도 다음 기능 개발을
 계속해야 할 때 `release/*` 도입을 검토한다.
@@ -40,11 +44,12 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ### 운영 긴급 수정 흐름
 
 1. 최신 `production`에서 `hotfix/*` 브랜치를 생성한다.
-2. 수정·검증 후 `production` 대상으로 PR을 생성한다. 관리자는 CI 통과 후 리뷰 승인 없이
-   리뷰 규칙만 우회하여 즉시 병합할 수 있으며, 이후 운영 배포한다.
+2. 수정·검증 후 `production` 대상으로 PR을 생성하고 **Merge commit**으로 병합한다.
+   관리자는 CI 통과 후 리뷰 승인 없이 리뷰 규칙만 우회하여 즉시 병합할 수 있으며,
+   이후 운영 배포한다.
 3. 배포 성공 후 새 버전 태그를 붙인다.
-4. 즉시 `production → main` 동기화 PR을 **Merge commit**으로 병합한다.
-   해당 Hotfix 동기화 PR에도 동일한 리뷰 승인 예외를 적용한다.
+4. 즉시 관리자가 `production → main` 동기화 PR에서 `main`의 병합 방식 규칙만 우회하여
+   **Merge commit**으로 병합한다. 해당 Hotfix 동기화 PR에도 동일한 리뷰 승인 예외를 적용한다.
 
 `main`과 `production` 사이의 병합은 항상 **Merge commit**을 사용한다.
 
@@ -139,7 +144,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ### 이슈·브랜치·PR·배포 연결
 
 - 기본 브랜치는 `main`으로 유지한다.
-- 이슈 번호를 브랜치 이름에 포함한다. 예: `feat/12-login`.
+- 이슈 번호를 브랜치 이름에 포함하는 것을 권장한다. 예: `feat/12-login`. 이름은 강제하지 않는다.
 - PR 제목은 `feat: 로그인 화면 구현`처럼 변경 유형과 내용을 나타낸다.
 - 작업을 완전히 해결하는 `main` 대상 PR 본문에는 `Closes #12`처럼 이슈를 연결한다.
 - 일부 작업만 포함하는 PR 본문에는 `Refs #12`처럼 이슈를 참조한다.
@@ -209,13 +214,32 @@ GitHub Projects, 라벨, 마일스톤은 위 기준에 맞춰 구성한다.
 - 공통 보호 규칙은 PR 필수, 리뷰 대화 해결, `Frontend CI` 통과,
   최신 대상 브랜치와 함께 검증, force push·브랜치 삭제 금지를 적용한다. 우회 권한은 부여하지 않는다.
 - 리뷰 규칙은 승인 1명, 변경 시 기존 승인 취소, 마지막 push 작성자 외 승인을 요구한다.
-- 리뷰 규칙에만 저장소 관리자 역할의 **PR에서만 우회** 권한을 부여한다.
-- 관리자는 `hotfix/* → production`과 해당 Hotfix의 `production → main` 동기화에만
-  리뷰 우회를 사용한다. PR 본문에는 관련 이슈와 Hotfix 사유를 기록한다.
+- 리뷰 규칙에는 저장소 관리자 역할의 **PR에서만 우회** 권한을 부여한다.
+- 관리자는 운영 긴급 수정 PR과 해당 Hotfix의 `production → main` 동기화에만
+  리뷰 우회를 사용한다. PR 본문에는 관련 이슈와 Hotfix 사유를 기록하며,
+  브랜치 이름 대신 PR의 실제 목적을 확인한다.
 - GitHub 기본 규칙은 PR의 출발 브랜치 이름으로 리뷰 예외를 지정할 수 없다.
   관리자 우회 권한 자체는 다른 PR에도 적용되므로, Hotfix 한정 사용은 운영 규칙으로 준수한다.
 - 저장소 병합 방식은 Squash merge와 Merge commit을 허용하고 Rebase merge는 비활성화한다.
+- 병합 방식 규칙은 공통 보호·리뷰 규칙과 분리한다. `main`은 Squash merge만,
+  `production`은 Merge commit만 허용한다. `main` 병합 방식 규칙에만 관리자 역할의
+  **PR에서만 우회** 권한을 부여하며, `production` 병합 방식 규칙에는 우회를 허용하지 않는다.
+- 관리자는 `production → main` 동기화 PR에 한해서 `main` 병합 방식 규칙을 우회하고
+  Merge commit을 선택한다. 일반 작업 PR에는 병합 방식 우회를 사용하지 않는다.
+  일반 배포 동기화는 리뷰 승인을 받아야 하며, Hotfix 동기화만 기존 리뷰 예외를 적용한다.
+- GitHub는 출발 브랜치별로 병합 방식이나 관리자 우회 대상을 제한하지 못하므로,
+  동기화 한정 우회는 운영 규칙으로 준수한다. 이 우회로 공통 보호의 CI·대화 해결·PR 필수
+  조건을 우회할 수는 없다.
 - 병합된 작업 브랜치는 자동 삭제하되, 보호된 `main`, `production`은 유지한다.
+
+현재 적용된 GitHub 규칙:
+
+| 규칙 | 대상 | 우회 |
+| --- | --- | --- |
+| [Protected branches: PR and CI](https://github.com/KANT-2/leaf-bowl/rules/24690460) | `main`, `production` | 없음 |
+| [Code review: hotfix bypass](https://github.com/KANT-2/leaf-bowl/rules/24690471) | `main`, `production` | 관리자 PR 한정, Hotfix·해당 동기화에만 사용 |
+| [Merge method: main squash, admin production sync](https://github.com/KANT-2/leaf-bowl/rules/24699903) | `main` | 관리자 PR 한정, `production → main` 동기화에만 사용 |
+| [Merge method: production merge commits](https://github.com/KANT-2/leaf-bowl/rules/24699880) | `production` | 없음 |
 
 ## 개발 MCP CI/CD 운영
 

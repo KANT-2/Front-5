@@ -1,10 +1,9 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createContext, useCallback, useContext, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createLocalStore } from "@/lib/local-store";
-import { isCustom } from "@/lib/cart";
-import { CART_KEY, loadCart, saveCart, type CartItem, type MenuItem } from "@/lib/storage";
-
+import { isCustom, selectionKey } from "@/lib/cart";
+import { CART_KEY, loadCart, saveCart, type CartItem, type CustomItem, type MenuItem } from "@/lib/storage";
 
 const EMPTY: CartItem[] = [];
 const store = createLocalStore<CartItem[]>(CART_KEY, loadCart, saveCart, EMPTY);
@@ -13,6 +12,8 @@ interface CartContextValue {
   items: CartItem[];
   count: number;
   add: (item: MenuItem) => void;
+  /** bowl match 에서 만든 커스텀 볼 1개를 담는다. 같은 조합이면 수량만 늘린다. */
+  addCustom: (item: Omit<CustomItem, "kind" | "qty">) => void;
   update: (index: number, qty: number) => void;
   remove: (index: number) => void;
   clear: () => void;
@@ -32,8 +33,6 @@ export function useCart(): CartContextValue {
   return ctx;
 }
 
-const OPEN_CART_FLAG = "bb-open-cart";
-
 const sameDrinks = (a: number[], b: number[]) => a.length === b.length && a.every((d, i) => d === b[i]);
 const clampQty = (n: number) => Math.max(1, Math.min(99, n));
 
@@ -46,9 +45,17 @@ export default function CartProvider({ children }: { children: React.ReactNode }
   const add = useCallback((item: MenuItem) => {
     const drinks = [...item.drinks].sort((a, b) => a - b);
     const list = store.getSnapshot();
-    const at = list.findIndex((i) => !isCustom(i) && i.id === item.id && i.dressing === item.dressing && sameDrinks(i.drinks, drinks));
+    const at = list.findIndex((i) => !isCustom(i) && i.id === item.id && i.dressing === item.dressing && sameDrinks(i.drinks, drinks) && selectionKey(i.optionSelections)===selectionKey(item.optionSelections));
     if (at >= 0) store.set(list.map((i, n) => (n === at ? { ...i, qty: clampQty(i.qty + item.qty) } : i)));
     else store.set([...list, { ...item, drinks, qty: clampQty(item.qty) }]);
+  }, []);
+
+  const addCustom = useCallback((item: Omit<CustomItem, "kind" | "qty">) => {
+    const list = store.getSnapshot();
+    const key = item.ingredients.join("|");
+    const at = list.findIndex((i) => isCustom(i) && i.name === item.name && i.dressing === item.dressing && i.ingredients.join("|") === key);
+    if (at >= 0) store.set(list.map((i, n) => (n === at ? { ...i, qty: clampQty(i.qty + 1) } : i)));
+    else store.set([...list, { kind: "custom", ...item, ingredients: [...item.ingredients], allergens: [...item.allergens], qty: 1 }]);
   }, []);
 
   const update = useCallback((index: number, qty: number) => {
@@ -74,25 +81,11 @@ export default function CartProvider({ children }: { children: React.ReactNode }
     if (returnFocus && el && el.isConnected) el.focus({ preventScroll: true });
   }, []);
 
-  // bowl match 에서 커스텀 볼을 담고 넘어오면 장바구니를 연다 (public/bowl-match/app.js 가 표시를 남긴다).
-  useEffect(() => {
-    const t = setTimeout(() => {
-      try {
-        if (sessionStorage.getItem(OPEN_CART_FLAG) !== "1") return;
-        sessionStorage.removeItem(OPEN_CART_FLAG);
-      } catch {
-        return;
-      }
-      open(null);
-    }, 0);
-    return () => clearTimeout(t);
-  }, [open]);
-
   const count = items.reduce((n, i) => n + i.qty, 0);
 
   const value = useMemo(
-    () => ({ items, count, add, update, remove, clear, isOpen, openedAt, open, close }),
-    [items, count, add, update, remove, clear, isOpen, openedAt, open, close],
+    () => ({ items, count, add, addCustom, update, remove, clear, isOpen, openedAt, open, close }),
+    [items, count, add, addCustom, update, remove, clear, isOpen, openedAt, open, close],
   );
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

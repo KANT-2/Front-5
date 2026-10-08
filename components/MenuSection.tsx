@@ -1,19 +1,16 @@
 "use client";
 
+import { useCustomerCatalog } from "./CustomerCatalogProvider";
+import Link from "next/link";
 import { useState } from "react";
 import PageHeading from "./PageHeading";
 import ProductCard from "./ProductCard";
 import { useReviews } from "./ReviewsProvider";
-import { NUTRITION, PRODUCTS, type Category, type Product } from "@/lib/products";
+import { MATCH_URL, type Product } from "@/lib/products";
 
-type Filter = "all" | Exclude<Category, "other">;
+type Filter = string;
 
-const FILTERS: { key: Filter; label: string; badge?: string }[] = [
-  { key: "all", label: "전체 메뉴" },
-  { key: "protein", label: "든든한 단백질" },
-  { key: "vegan", label: "플랜트 베이스" },
-  { key: "new", label: "새로운 조합", badge: "NEW" },
-];
+
 
 type SortKey = "default" | "priceLow" | "priceHigh" | "kcalLow" | "proteinHigh" | "rating";
 
@@ -28,9 +25,13 @@ const SORTS: { key: SortKey; label: string }[] = [
 
 // 메뉴에 실제로 있는 알레르기만 (보여주는 순서 고정)
 const ALLERGEN_ORDER = ["닭고기", "연어", "새우", "대두", "우유", "쇠고기", "참치", "밀", "계란", "생선", "토마토"];
-const ALLERGENS = ALLERGEN_ORDER.filter((a) => PRODUCTS.some((p) => p.allergens.includes(a)));
+
 
 export default function MenuSection() {
+  const { NUTRITION } = useCustomerCatalog();
+  const { catalog, visibleProducts } = useCustomerCatalog();
+  const FILTERS = [{key:"all",label:"전체 메뉴"},...(catalog.categories??[]).map(label=>({key:label,label}))];
+  const ALLERGENS = [...new Set([...ALLERGEN_ORDER,...visibleProducts.flatMap(p=>p.allergens)])].filter(a=>visibleProducts.some(p=>p.allergens.includes(a)));
   const { statsFor } = useReviews();
   const [filter, setFilter] = useState<Filter>("all");
   const [term, setTerm] = useState("");
@@ -39,9 +40,9 @@ export default function MenuSection() {
   const [showAllergy, setShowAllergy] = useState(false);
 
   const q = term.trim().toLowerCase();
-  const found = PRODUCTS.filter(
+  const found = visibleProducts.filter(
     (p) =>
-      (filter === "all" || p.category === filter) &&
+      (filter === "all" || p.categoryLabel === filter) &&
       `${p.name} ${p.en} ${p.ingredients}`.toLowerCase().includes(q) &&
       !p.allergens.some((a) => excluded.includes(a)),
   );
@@ -81,7 +82,7 @@ export default function MenuSection() {
         {FILTERS.map((f) => (
           <button key={f.key} type="button" className={filter === f.key ? "active" : ""} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>
             {f.label}
-            {f.badge && <span>{f.badge}</span>}
+            {false && <span>NEW</span>}
           </button>
         ))}
       </div>
@@ -135,9 +136,21 @@ export default function MenuSection() {
             <button type="button" className="ghost-btn empty-reset" onClick={resetAll}>
               조건 모두 지우기
             </button>
+            <Link className="empty-match" href={MATCH_URL}>
+              원하는 재료로 직접 만들기 ♡
+            </Link>
           </div>
         )}
       </div>
+      <aside className="menu-match" aria-label="내 취향 찾기 안내">
+        <div>
+          <strong>원하는 조합이 없다면?</strong>
+          <p>좋아하는 재료에 하트를 보내고 나만의 샐러드를 만들어보세요.</p>
+        </div>
+        <Link className="primary" href={MATCH_URL}>
+          내 취향 찾기 <span>♡</span>
+        </Link>
+      </aside>
       <p className="ingredient-note">모든 메뉴는 드레싱을 선택할 수 있어요. 음료는 메뉴 선택 후 추가할 수 있습니다.</p>
     </section>
   );

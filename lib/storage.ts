@@ -1,4 +1,3 @@
-import { DRESSINGS, DRINKS, PRODUCTS } from "./products";
 import type { Review } from "./reviews";
 
 export const CART_KEY = "bb-cart";
@@ -6,14 +5,18 @@ export const REVIEW_KEY = "bb-user-reviews";
 
 /** 메뉴에서 고른 상품 */
 export interface MenuItem {
+  optionSelections?: Record<string, string[]>;
+  extraPrice?: number;
+  extraOptions?: string[];
   id: number;
   dressing: number;
   drinks: number[];
   qty: number;
 }
 
-/** bowl match 에서 재료를 골라 만든 커스텀 볼 (public/bowl-match/app.js 가 같은 모양으로 저장한다) */
+/** bowl match(/match) 에서 재료를 골라 만든 커스텀 볼 */
 export interface CustomItem {
+  ingredientIds?: string[];
   kind: "custom";
   name: string;
   /** 재료 이름 */
@@ -50,12 +53,15 @@ function writeJSON(key: string, value: unknown) {
   }
 }
 
-const isIndex = (v: unknown, list: readonly unknown[]): v is number =>
-  typeof v === "number" && Number.isInteger(v) && v >= 0 && v < list.length;
+const isProductId = (v: unknown): v is number =>
+  typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 10000;
 
-const isQty = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v > 0 && v <= 99;
+const isQty = (v: unknown): v is number =>
+  typeof v === "number" && Number.isInteger(v) && v > 0 && v <= 99;
 const isStringList = (v: unknown, max: number): v is string[] =>
-  Array.isArray(v) && v.length <= max && v.every((x) => typeof x === "string" && x.length <= 30);
+  Array.isArray(v) &&
+  v.length <= max &&
+  v.every((x) => typeof x === "string" && x.length <= 80);
 
 function isCustomItem(v: unknown): v is CustomItem {
   return (
@@ -64,15 +70,19 @@ function isCustomItem(v: unknown): v is CustomItem {
     typeof v.name === "string" &&
     v.name.length > 0 &&
     v.name.length <= 30 &&
-    isStringList(v.ingredients, 30) &&
+    isStringList(v.ingredients, 300) &&
     v.ingredients.length > 0 &&
     isStringList(v.allergens, 30) &&
-    isIndex(v.dressing, DRESSINGS) &&
+    (v.dressing === -1 ||
+      (typeof v.dressing === "number" &&
+        Number.isInteger(v.dressing) &&
+        v.dressing >= 0 &&
+        v.dressing < 300)) &&
     typeof v.price === "number" &&
     Number.isInteger(v.price) &&
     v.price > 0 &&
-    v.price <= 100000 &&
-    isIndex(v.photo, PRODUCTS) &&
+    v.price <= 300000000 &&
+    isProductId(v.photo) &&
     isQty(v.qty)
   );
 }
@@ -80,14 +90,22 @@ function isCustomItem(v: unknown): v is CustomItem {
 function isMenuItem(v: unknown): v is MenuItem {
   return (
     isRecord(v) &&
-    isIndex(v.id, PRODUCTS) &&
-    isIndex(v.dressing, DRESSINGS) &&
+    typeof v.id === "number" &&
+    Number.isInteger(v.id) &&
+    v.id >= 0 &&
+    (v.dressing === -1 ||
+      (typeof v.dressing === "number" &&
+        Number.isInteger(v.dressing) &&
+        v.dressing >= 0 &&
+        v.dressing < 300)) &&
     typeof v.qty === "number" &&
     Number.isInteger(v.qty) &&
     v.qty > 0 &&
     v.qty <= 99 &&
     Array.isArray(v.drinks) &&
-    v.drinks.every((d) => isIndex(d, DRINKS))
+    v.drinks.every(
+      (d) => typeof d === "number" && Number.isInteger(d) && d >= 0 && d < 300,
+    )
   );
 }
 
@@ -98,10 +116,46 @@ export function loadCart(): CartItem[] {
   for (const v of raw) {
     if (isCustomItem(v)) {
       const { name, ingredients, allergens, dressing, price, photo, qty } = v;
-      out.push({ kind: "custom", name, ingredients: [...ingredients], allergens: [...allergens], dressing, price, photo, qty });
+      out.push({
+        kind: "custom",
+        ingredientIds:
+          Array.isArray(v.ingredientIds) &&
+          v.ingredientIds.every(
+            (id) => typeof id === "string" && id.length <= 80,
+          )
+            ? v.ingredientIds
+            : undefined,
+        name,
+        ingredients: [...ingredients],
+        allergens: [...allergens],
+        dressing,
+        price,
+        photo,
+        qty,
+      });
     } else if (isMenuItem(v)) {
       const { id, dressing, drinks, qty } = v;
-      out.push({ id, dressing, drinks: [...drinks], qty });
+      out.push({
+        id,
+        dressing,
+        drinks: [...drinks],
+        qty,
+        optionSelections: isRecord(v.optionSelections)
+          ? Object.fromEntries(
+              Object.entries(v.optionSelections).filter(
+                (entry): entry is [string, string[]] =>
+                  isStringList(entry[1], 30),
+              ),
+            )
+          : undefined,
+        extraPrice:
+          typeof v.extraPrice === "number" &&
+          Number.isFinite(v.extraPrice) &&
+          v.extraPrice >= 0
+            ? v.extraPrice
+            : 0,
+        extraOptions: isStringList(v.extraOptions, 30) ? v.extraOptions : [],
+      });
     }
   }
   return out;
@@ -115,7 +169,7 @@ function isStoredReview(v: unknown): v is Review {
   return (
     isRecord(v) &&
     typeof v.id === "string" &&
-    isIndex(v.pid, PRODUCTS) &&
+    isProductId(v.pid) &&
     typeof v.stars === "number" &&
     Number.isInteger(v.stars) &&
     v.stars >= 1 &&
@@ -151,6 +205,16 @@ export function loadUserReviews(): Review[] {
 export function saveUserReviews(list: Review[]) {
   writeJSON(
     REVIEW_KEY,
-    list.map(({ id, pid, author, stars, title, text, date, via, t }) => ({ id, pid, author, stars, title, text, date, via, t })),
+    list.map(({ id, pid, author, stars, title, text, date, via, t }) => ({
+      id,
+      pid,
+      author,
+      stars,
+      title,
+      text,
+      date,
+      via,
+      t,
+    })),
   );
 }

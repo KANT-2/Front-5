@@ -1,7 +1,11 @@
-import { PRODUCTS } from "@/lib/products";
+"use client";
+
+import Image from "next/image";
+import { useCustomerCatalog } from "./CustomerCatalogProvider";
 import { dateStr, type Review } from "@/lib/reviews";
 
 export default function ReviewCard({ review: r }: { review: Review }) {
+  const { PRODUCTS } = useCustomerCatalog();
   return (
     <article className={`review-card${r.mine ? " is-mine" : ""}`}>
       <div className="review-top">
@@ -16,9 +20,9 @@ export default function ReviewCard({ review: r }: { review: Review }) {
         <span>{r.stars}.0</span>
       </div>
       <h3>{r.title}</h3>
-      <p>{r.text}</p>
+      <p>{r.text}</p>{r.images?.map(src=><Image key={src} src={src} alt="고객 리뷰 사진" width={240} height={180} sizes="240px" style={{objectFit:"cover",maxWidth:"100%",height:"auto"}}/>)}
       <span className="review-menu">
-        {PRODUCTS[r.pid].name}
+        {PRODUCTS[r.pid]?.name ?? "삭제된 메뉴"}
       </span>
       <div className="review-author">
         <span className="review-avatar" aria-hidden="true">
@@ -27,7 +31,7 @@ export default function ReviewCard({ review: r }: { review: Review }) {
         <span>
           {r.author}
           <small>
-            {r.date || dateStr(r.t)} · {r.mine ? "내가 작성" : "예시 리뷰"}
+            {r.date || dateStr(r.t)} · {r.mine ? "내가 작성" : r.sample ? "예시 리뷰" : "고객 리뷰"}
           </small>
         </span>
       </div>

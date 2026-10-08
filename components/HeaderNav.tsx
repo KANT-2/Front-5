@@ -18,9 +18,9 @@ export default function HeaderNav() {
       <Link href="/reviews" aria-current={onReviews ? "page" : undefined}>
         고객 리뷰
       </Link>
-      <a href={MATCH_URL} className="match-link">
-        내 취향 찾기 ↗
-      </a>
+      <Link href={MATCH_URL} className="match-link" aria-current={path === MATCH_URL ? "page" : undefined}>
+        내 취향 찾기
+      </Link>
     </nav>
   );
 }

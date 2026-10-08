@@ -15,7 +15,7 @@ export interface HeroSlide {
 }
 
 // 지금은 코드 안의 고정 데이터. DB 로 옮길 때는 getHeroSlides() 안만 바꾸면 된다.
-const HERO_SLIDES: HeroSlide[] = [
+export const HERO_SLIDES: HeroSlide[] = [
   {
     eyebrow: "FRESH BOWL, FRESH DAY",
     title: ["좋은 하루는,", "좋은 한 그릇에서."],
@@ -68,6 +68,5 @@ const HERO_SLIDES: HeroSlide[] = [
 
 /** 홈 상단 배너 목록을 가져온다. */
 export async function getHeroSlides(): Promise<HeroSlide[]> {
-  "use cache";
   return HERO_SLIDES;
 }

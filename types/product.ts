@@ -7,6 +7,8 @@ export interface Product {
   // ── 과제 필수 규격 ──
   /** 상품 고유 번호. 현재 PRODUCTS 배열 위치와 같다 (0부터) */
   id: number;
+  status?: "active" | "soldout" | "hidden";
+  categoryLabel?: string;
   name: string;
   /** 원 단위 정수 */
   price: number;
