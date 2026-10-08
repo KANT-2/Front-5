@@ -234,3 +234,7 @@
   .allergy-toggle, .menu-sort select { font-size: 13px; padding: 7px 12px; }
   .menu-count { font-size: 12px; }
 }
+
+/* 음료 페이지 */
+.drink-card .product-photo { background: #f4f2ed; }
+.drink-card .food-image { padding: 0; object-fit: cover; }

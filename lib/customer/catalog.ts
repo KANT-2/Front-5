@@ -6,7 +6,7 @@ import { HERO_SLIDES } from "@/lib/data/hero";
 import type { Ingredient } from "@/lib/data/ingredients";
 import type { Review } from "@/lib/reviews";
 import type { CartItem } from "@/lib/storage";
-import { isCustom } from "@/lib/cart";
+import { isCustom, isDrink } from "@/lib/cart";
 
 const split = (s: string) =>
   s
@@ -133,7 +133,7 @@ export function customerCatalog(snapshot: Snapshot) {
   const productFromParam = (param: string) =>
     /^\d+$/.test(param) ? getProduct(Number(param)) : undefined;
   const selectedOptions = (i: CartItem) =>
-    isCustom(i)
+    isCustom(i) || isDrink(i)
       ? []
       : Object.entries(i.optionSelections ?? {}).flatMap(([id, ids]) => {
           const group = catalog.groups.find((g) => g.id === id && !g.deleted);
@@ -145,6 +145,7 @@ export function customerCatalog(snapshot: Snapshot) {
           return choices.filter((c) => ids.includes(c.id));
         });
   const itemAvailable = (i: CartItem) => {
+    if (isDrink(i)) return !!DRINKS[i.drink]?.available;
     if (isCustom(i))
       return (
         !!DRESSINGS[i.dressing]?.available &&
@@ -206,7 +207,9 @@ export function customerCatalog(snapshot: Snapshot) {
     };
   };
   const itemUnitPrice = (i: CartItem) =>
-    isCustom(i)
+    isDrink(i)
+      ? (DRINKS[i.drink]?.price ?? 0)
+      : isCustom(i)
       ? (i.ingredientIds
           ? BASE_BOWL_PRICE +
             ingredients
@@ -220,9 +223,11 @@ export function customerCatalog(snapshot: Snapshot) {
           (DRESSINGS[i.dressing]?.price ?? 0) +
           (i.extraPrice ?? 0);
   const itemName = (i: CartItem) =>
-    isCustom(i) ? i.name : (PRODUCTS[i.id]?.name ?? "삭제된 메뉴");
+    isDrink(i) ? (DRINKS[i.drink]?.name || "판매 종료 음료") : isCustom(i) ? i.name : (PRODUCTS[i.id]?.name ?? "삭제된 메뉴");
   const itemOptions = (i: CartItem) =>
-    !isCustom(i) && i.optionSelections
+    isDrink(i)
+      ? "음료"
+      : !isCustom(i) && i.optionSelections
       ? selectedOptions(i)
           .map((c) => c.name)
           .join(" · ")
@@ -234,8 +239,10 @@ export function customerCatalog(snapshot: Snapshot) {
         ]
           .filter(Boolean)
           .join(" · ");
-  const itemAllergens = (i: CartItem) =>
-    isCustom(i)
+  const itemAllergens = (i: CartItem): string[] =>
+    isDrink(i)
+      ? []
+      : isCustom(i)
       ? [...i.allergens, ...(DRESSINGS[i.dressing]?.allergens ?? [])]
       : i.optionSelections
         ? [
