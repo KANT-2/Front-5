@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import ReviewCard from "./ReviewCard";
+import { useReviewWrite } from "./ReviewWrite";
 import { useReviews } from "./ReviewsProvider";
 import { newest } from "@/lib/reviews";
 
 export default function ProductReviewsPreview({ id }: { id: number }) {
   const list = useReviews().reviewsFor(id);
+  const { openWrite } = useReviewWrite();
   const latest = [...list].sort(newest).slice(0, 3);
   return (
     <section className="pvsec" aria-labelledby="pvRvTitle">
@@ -25,9 +27,9 @@ export default function ProductReviewsPreview({ id }: { id: number }) {
         ))}
       </div>
       <p className="pv-cta">
-        <Link className="primary" href={`/product/${id}/reviews#write`}>
-          리뷰 쓰기 <span>↗</span>
-        </Link>
+        <button type="button" className="primary" onClick={() => openWrite(id)}>
+          리뷰 쓰기
+        </button>
       </p>
     </section>
   );
