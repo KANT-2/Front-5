@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createLocalStore } from "@/lib/local-store";
-import { isCustom, selectionKey } from "@/lib/cart";
+import { isCustom, isDrink, isMenu, itemKey, selectionKey, withChoice } from "@/lib/cart";
 import { CART_KEY, loadCart, saveCart, type CartItem, type CustomItem, type MenuItem } from "@/lib/storage";
 
 const EMPTY: CartItem[] = [];
@@ -14,7 +14,16 @@ interface CartContextValue {
   add: (item: MenuItem) => void;
   /** bowl match 에서 만든 커스텀 볼 1개를 담는다. 같은 조합이면 수량만 늘린다. */
   addCustom: (item: Omit<CustomItem, "kind" | "qty">) => void;
+  /** 음료 한 잔을 따로 담는다. 이미 있으면 수량만 늘린다. */
+  addDrink: (drink: number) => void;
   update: (index: number, qty: number) => void;
+  /**
+   * 한 줄의 단일 선택 옵션(드레싱 등)을 바꾼다. groupId 가 null 이면 예전 방식(dressing 번호) 줄이다.
+   * 같은 구성이 이미 있으면 그 줄과 합치고 true 를 돌려준다.
+   */
+  changeChoice: (index: number, groupId: string | null, value: string) => boolean;
+  /** 같은 샐러드를 다른 선택(드레싱 등)으로 1개 더 담는다. 새 줄(또는 합쳐진 줄)의 위치를 돌려준다. */
+  addVariant: (index: number, groupId: string | null, value: string) => number;
   remove: (index: number) => void;
   clear: () => void;
   isOpen: boolean;
@@ -36,6 +45,7 @@ export function useCart(): CartContextValue {
 const sameDrinks = (a: number[], b: number[]) => a.length === b.length && a.every((d, i) => d === b[i]);
 const clampQty = (n: number) => Math.max(1, Math.min(99, n));
 
+
 export default function CartProvider({ children }: { children: React.ReactNode }) {
   const items = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
   const [isOpen, setIsOpen] = useState(false);
@@ -45,7 +55,7 @@ export default function CartProvider({ children }: { children: React.ReactNode }
   const add = useCallback((item: MenuItem) => {
     const drinks = [...item.drinks].sort((a, b) => a - b);
     const list = store.getSnapshot();
-    const at = list.findIndex((i) => !isCustom(i) && i.id === item.id && i.dressing === item.dressing && sameDrinks(i.drinks, drinks) && selectionKey(i.optionSelections)===selectionKey(item.optionSelections));
+    const at = list.findIndex((i) => isMenu(i) && i.id === item.id && i.dressing === item.dressing && sameDrinks(i.drinks, drinks) && selectionKey(i.optionSelections)===selectionKey(item.optionSelections));
     if (at >= 0) store.set(list.map((i, n) => (n === at ? { ...i, qty: clampQty(i.qty + item.qty) } : i)));
     else store.set([...list, { ...item, drinks, qty: clampQty(item.qty) }]);
   }, []);
@@ -56,6 +66,41 @@ export default function CartProvider({ children }: { children: React.ReactNode }
     const at = list.findIndex((i) => isCustom(i) && i.name === item.name && i.dressing === item.dressing && i.ingredients.join("|") === key);
     if (at >= 0) store.set(list.map((i, n) => (n === at ? { ...i, qty: clampQty(i.qty + 1) } : i)));
     else store.set([...list, { kind: "custom", ...item, ingredients: [...item.ingredients], allergens: [...item.allergens], qty: 1 }]);
+  }, []);
+
+  const addDrink = useCallback((drink: number) => {
+    const list = store.getSnapshot();
+    const at = list.findIndex((i) => isDrink(i) && i.drink === drink);
+    if (at >= 0) store.set(list.map((i, n) => (n === at ? { ...i, qty: clampQty(i.qty + 1) } : i)));
+    else store.set([...list, { kind: "drink", drink, qty: 1 }]);
+  }, []);
+
+  const changeChoice = useCallback((index: number, groupId: string | null, value: string) => {
+    const list = store.getSnapshot();
+    const cur = list[index];
+    if (!cur || isDrink(cur)) return false;
+    const next = withChoice(cur, groupId, value);
+    const same = list.findIndex((i, n) => n !== index && itemKey(i) === itemKey(next));
+    if (same < 0) {
+      store.set(list.map((i, n) => (n === index ? next : i)));
+      return false;
+    }
+    store.set(list.flatMap((i, n) => (n === index ? [] : n === same ? [{ ...i, qty: clampQty(i.qty + cur.qty) }] : [i])));
+    return true;
+  }, []);
+
+  const addVariant = useCallback((index: number, groupId: string | null, value: string) => {
+    const list = store.getSnapshot();
+    const cur = list[index];
+    if (!cur || isDrink(cur)) return -1;
+    const next = { ...withChoice(cur, groupId, value), qty: 1 };
+    const same = list.findIndex((i) => itemKey(i) === itemKey(next));
+    if (same >= 0) {
+      store.set(list.map((i, n) => (n === same ? { ...i, qty: clampQty(i.qty + 1) } : i)));
+      return same;
+    }
+    store.set([...list.slice(0, index + 1), next, ...list.slice(index + 1)]);
+    return index + 1;
   }, []);
 
   const update = useCallback((index: number, qty: number) => {
@@ -84,8 +129,8 @@ export default function CartProvider({ children }: { children: React.ReactNode }
   const count = items.reduce((n, i) => n + i.qty, 0);
 
   const value = useMemo(
-    () => ({ items, count, add, addCustom, update, remove, clear, isOpen, openedAt, open, close }),
-    [items, count, add, addCustom, update, remove, clear, isOpen, openedAt, open, close],
+    () => ({ items, count, add, addCustom, addDrink, update, changeChoice, addVariant, remove, clear, isOpen, openedAt, open, close }),
+    [items, count, add, addCustom, addDrink, update, changeChoice, addVariant, remove, clear, isOpen, openedAt, open, close],
   );
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

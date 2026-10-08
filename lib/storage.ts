@@ -31,7 +31,15 @@ export interface CustomItem {
   qty: number;
 }
 
-export type CartItem = MenuItem | CustomItem;
+/** 장바구니에서 따로 담은 음료 한 종류 */
+export interface DrinkItem {
+  kind: "drink";
+  /** 카탈로그 DRINKS 번호 */
+  drink: number;
+  qty: number;
+}
+
+export type CartItem = MenuItem | CustomItem | DrinkItem;
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
@@ -133,6 +141,8 @@ export function loadCart(): CartItem[] {
         photo,
         qty,
       });
+    } else if (isRecord(v) && v.kind === "drink" && isProductId(v.drink) && isQty(v.qty)) {
+      out.push({ kind: "drink", drink: v.drink, qty: v.qty });
     } else if (isMenuItem(v)) {
       const { id, dressing, drinks, qty } = v;
       out.push({

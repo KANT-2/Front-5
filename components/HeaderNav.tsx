@@ -14,6 +14,9 @@ export default function HeaderNav() {
       <Link href="/menu" aria-current={path === "/menu" ? "page" : undefined}>
         메뉴
       </Link>
+      <Link href="/drinks" aria-current={path === "/drinks" ? "page" : undefined}>
+        음료
+      </Link>
       <Link href="/#monthly">시즌 스페셜</Link>
       <Link href="/reviews" aria-current={onReviews ? "page" : undefined}>
         고객 리뷰
