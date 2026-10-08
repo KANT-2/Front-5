@@ -11,6 +11,8 @@ const store = createLocalStore<Review[]>(REVIEW_KEY, loadUserReviews, saveUserRe
 
 interface ReviewsContextValue {
   userReviews: Review[];
+  /** 모든 메뉴의 리뷰 */
+  allReviews: Review[];
   reviewsFor: (pid: number) => Review[];
   statsFor: (pid: number) => ReviewStats;
   addReview: (review: Review) => Promise<void>;
@@ -28,6 +30,7 @@ export default function ReviewsProvider({ children }: { children: React.ReactNod
   const {reviews}=useCustomerCatalog();
   const userReviews = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
 
+
   const migrated=useRef(new Set<string>());
   useEffect(()=>{
     let cancelled=false;
@@ -43,6 +46,7 @@ export default function ReviewsProvider({ children }: { children: React.ReactNod
     return ()=>{cancelled=true;};
   },[userReviews,reviews]);
 
+  const allReviews = useMemo(() => reviews.map(r => ({...r, mine: userReviews.some(u => u.id === r.id)})), [reviews, userReviews]);
   const reviewsFor = useCallback((pid: number) => [...reviews.filter(r=>r.pid===pid).map(r=>({...r,mine:userReviews.some(u=>u.id===r.id)}))], [userReviews,reviews]);
   const statsFor = useCallback((pid: number) => statsOf([...reviews.filter(r=>r.pid===pid).map(r=>({...r,mine:userReviews.some(u=>u.id===r.id)}))]), [userReviews,reviews]);
   const addReview = useCallback(async (review: Review) => {
@@ -51,9 +55,10 @@ export default function ReviewsProvider({ children }: { children: React.ReactNod
     store.set([review,...store.getSnapshot()]);notifyCatalogSaved();
   }, []);
 
+
   const value = useMemo(
-    () => ({ userReviews, reviewsFor, statsFor, addReview }),
-    [userReviews, reviewsFor, statsFor, addReview],
+    () => ({ userReviews, allReviews, reviewsFor, statsFor, addReview }),
+    [userReviews, allReviews, reviewsFor, statsFor, addReview],
   );
   return <ReviewsContext.Provider value={value}>{children}</ReviewsContext.Provider>;
 }

@@ -118,6 +118,23 @@ const assert = require("assert/strict");
     .getByText(ingredient.name, { exact: true })
     .first()
     .waitFor({ timeout: 12000 });
+  console.log("Checking shared review modal");
+  await page.goto(base + "/product/0/reviews");
+  await page.getByRole("button", {name:"리뷰 쓰기", exact:true}).click();
+  const reviewDialog=page.locator("dialog.rw");
+  await reviewDialog.getByRole("radio",{name:"5점",exact:true}).check();
+  await reviewDialog.locator('input[name="title"]').fill("공통 리뷰 등록 검증");
+  await reviewDialog.locator('textarea[name="text"]').fill("새 리뷰 작성 모달에서도 공통 저장소에 저장되는지 검증합니다.");
+  await reviewDialog.getByRole("button",{name:"리뷰 등록하기",exact:true}).click();
+  await page.getByRole("heading",{name:"공통 리뷰 등록 검증",exact:true}).waitFor({timeout:12000});
+  const posted=snapshot.catalog.reviews.find(r=>r.title==="공통 리뷰 등록 검증");
+  assert.ok(posted);
+  await page.goto(base + "/reviews");
+  await page.getByRole("heading",{name:"공통 리뷰 등록 검증",exact:true}).waitFor({timeout:12000});
+  posted.deleted=true;
+  snapshot.revision++;
+  await page.evaluate(()=>window.dispatchEvent(new Event("focus")));
+  await page.getByRole("heading",{name:"공통 리뷰 등록 검증",exact:true}).waitFor({state:"hidden",timeout:12000});
   console.log("Checking admin preview");
   await page.goto(base + "/admin");
   await page

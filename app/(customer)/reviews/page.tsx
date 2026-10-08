@@ -1,8 +1,14 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+import Breadcrumb from "@/components/Breadcrumb";
+import ReviewsView from "@/components/ReviewsView";
 
-// 리다이렉트만 하는 페이지라 즉시 이동 검증 대상이 아니다.
-export const instant = false;
+export const metadata: Metadata = { title: "고객 리뷰 — leaf & bowl" };
 
-export default function ReviewsIndex() {
-  redirect("/product/0/reviews");
+export default function ReviewsPage() {
+  return (
+    <main className="wrap pv-wrap">
+      <Breadcrumb items={[["홈", "/"], ["고객 리뷰"]]} />
+      <ReviewsView pid={null} />
+    </main>
+  );
 }
