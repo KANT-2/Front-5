@@ -12,6 +12,7 @@ export const ingredientPhoto = (id: string) => `/images/ingredients/${id}.png`;
 /** 카드 한 장에 대한 선택. index 는 재료 순서, liked 는 하트 여부. */
 export interface Decision {
   index: number;
+  ingredientId?: string;
   liked: boolean;
 }
 
@@ -69,7 +70,7 @@ function loadDecisions(): Decision[] {
   // 앞에서부터 순서가 맞는 기록까지만 쓴다.
   for (const [n, d] of raw.entries()) {
     if (typeof d !== "object" || d === null || d.index !== n || typeof d.liked !== "boolean") break;
-    out.push({ index: n, liked: d.liked });
+    out.push({ index: n, liked: d.liked, ingredientId: typeof d.ingredientId === "string" ? d.ingredientId : undefined });
   }
   return out;
 }

@@ -1,97 +1,194 @@
 "use client";
-
 import Image from "next/image";
 import { useState } from "react";
+import { useCustomerCatalog } from "./CustomerCatalogProvider";
 import { useCart } from "./CartProvider";
-import { DRESSINGS, DRESSING_KCAL, DRINKS, DRINK_KCAL, NUTRITION, OPTION_IMAGES, allergensOf, kcalOf, money, unitPrice, type Product } from "@/lib/products";
+import { money, type Product } from "@/lib/products";
 
-/** 옵션 라벨에 마우스를 올리거나 키보드로 포커스하면 위에 뜨는 사진 (장식용, 이름은 라벨이 읽어준다) */
-function OptionPreview({ name }: { name: string }) {
-  const src = OPTION_IMAGES[name];
-  if (!src) return null;
-  return (
-    <span className="opt-preview" aria-hidden="true">
-      <Image src={src} alt="" width={1024} height={1024} sizes="150px" />
-      <em>{name}</em>
-    </span>
-  );
-}
-
-/** 상세 페이지의 선택 영역: 드레싱 · 음료 · 알레르기 · 수량 · 담기 */
 export default function ProductDetail({ product: p }: { product: Product }) {
+  const {
+    catalog,
+    groupsFor,
+    DRESSINGS,
+    DRINKS,
+    NUTRITION,
+    DRESSING_KCAL,
+    DRINK_KCAL,
+  } = useCustomerCatalog();
   const { add, open } = useCart();
-  const [dressing, setDressing] = useState(0);
-  const [drinks, setDrinks] = useState<number[]>([]);
-  const [showDrinks, setShowDrinks] = useState(false);
+  const [selected, setSelected] = useState<Record<string, string[]>>({});
   const [qty, setQty] = useState(1);
-
-  const toggleDrink = (i: number, on: boolean) =>
-    setDrinks((list) => (on ? [...list, i].sort((a, b) => a - b) : list.filter((d) => d !== i)));
-
-  const allergens = allergensOf(p.id, dressing);
-
+  const groups = groupsFor(p.id).map((g) => ({
+    ...g,
+    choices:
+      g.source === "custom"
+        ? g.choices
+        : catalog.products
+            .filter(
+              (c) =>
+                c.type === (g.source === "drinks" ? "drink" : "dressing") &&
+                !c.deleted &&
+                c.status === "active",
+            )
+            .map((c) => ({
+              id: c.id,
+              name: c.name,
+              price: c.price,
+              image: c.image,
+            })),
+  }));
+  const chosen = groups.flatMap((g) =>
+    g.choices.filter((c) => (selected[g.id] ?? []).includes(c.id)),
+  );
+  const complete = groups.every(
+    (g) =>
+      !g.required ||
+      g.choices.some((c) => (selected[g.id] ?? []).includes(c.id)),
+  );
+  const optionPrice = chosen.reduce((n, c) => n + c.price, 0);
+  const dress = chosen.find(
+    (c) => catalog.products.find((x) => x.id === c.id)?.type === "dressing",
+  );
+  const drinkChoices = chosen.filter(
+    (c) => catalog.products.find((x) => x.id === c.id)?.type === "drink",
+  );
+  const dressing = dress ? DRESSINGS.findIndex((d) => d.id === dress.id) : -1;
+  const drinks = drinkChoices.map((c) =>
+    DRINKS.findIndex((d) => d.id === c.id),
+  );
+  const accounted =
+    (dressing >= 0 ? DRESSINGS[dressing].price : 0) +
+    drinks.reduce((n, i) => n + DRINKS[i].price, 0);
   return (
     <>
-      <h3 id="dressingTitle">드레싱 선택</h3>
-      <div className="option-list" role="radiogroup" aria-labelledby="dressingTitle">
-        {DRESSINGS.map((x, i) => (
-          <label key={x.name}>
-            <input type="radio" name="dressing" value={i} checked={dressing === i} onChange={() => setDressing(i)} />
-            {x.name}
-            <OptionPreview name={x.name} />
-          </label>
-        ))}
-      </div>
-      <button
-        className="drink-toggle"
-        type="button"
-        aria-expanded={showDrinks}
-        aria-controls="drinkList"
-        onClick={() => setShowDrinks((v) => !v)}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!complete || p.status !== "active") return;
+          add({
+            id: p.id,
+            dressing,
+            drinks,
+            qty,
+            optionSelections: selected,
+            extraPrice: optionPrice - accounted,
+            extraOptions: chosen
+              .filter((c) => c !== dress && !drinkChoices.includes(c))
+              .map((c) => c.name),
+          });
+          open(
+            e.currentTarget.querySelector<HTMLButtonElement>(
+              'button[type="submit"]',
+            ),
+          );
+        }}
       >
-        {showDrinks ? "− 음료 접기" : "+ 음료 추가하기"}
-      </button>
-      <div className="drink-list" id="drinkList" hidden={!showDrinks}>
-        {DRINKS.map((x, i) => (
-          <label key={x.name}>
-            <input type="checkbox" name="drink" value={i} checked={drinks.includes(i)} onChange={(e) => toggleDrink(i, e.target.checked)} />
-            {x.name}
-            <span>+{money(x.price)}</span>
-            <OptionPreview name={x.name} />
-          </label>
+        {groups.map((g) => (
+          <fieldset key={g.id} className="option-list">
+            <legend>
+              {g.name}
+              {g.required ? " (필수)" : ""}
+            </legend>
+            {g.choices.length ? (
+              g.choices.map((c) => (
+                <label key={c.id}>
+                  <input
+                    type={g.multiple ? "checkbox" : "radio"}
+                    name={g.id}
+                    checked={(selected[g.id] ?? []).includes(c.id)}
+                    onChange={(e) =>
+                      setSelected((current) => ({
+                        ...current,
+                        [g.id]: g.multiple
+                          ? e.target.checked
+                            ? [...(current[g.id] ?? []), c.id]
+                            : (current[g.id] ?? []).filter((id) => id !== c.id)
+                          : e.target.checked
+                            ? [c.id]
+                            : [],
+                      }))
+                    }
+                  />
+                  {c.name}
+                  {c.price > 0 && <span> +{money(c.price)}</span>}
+                  {"image" in c && typeof c.image === "string" && c.image && (
+                    <span className="opt-preview" aria-hidden="true">
+                      <Image
+                        src={c.image}
+                        alt=""
+                        width={1024}
+                        height={1024}
+                        sizes="150px"
+                      />
+                    </span>
+                  )}
+                </label>
+              ))
+            ) : (
+              <p>현재 선택 가능한 옵션이 없습니다.</p>
+            )}
+            {!g.required && !g.multiple && (
+              <button
+                type="button"
+                onClick={() => setSelected((s) => ({ ...s, [g.id]: [] }))}
+              >
+                선택 안 함
+              </button>
+            )}
+          </fieldset>
         ))}
-      </div>
-      <p className="pv-kcal" aria-live="polite">
-        선택한 구성 약 <b>{kcalOf(p.id, dressing, drinks)}kcal</b>
-        <span>
-          샐러드 {NUTRITION[p.id].kcal} + 드레싱 {DRESSING_KCAL[dressing]}
-          {drinks.length ? ` + 음료 ${drinks.reduce((n, d) => n + DRINK_KCAL[d], 0)}` : ""} · 예시 값
-        </span>
-      </p>
-      <div className="allergen-box" aria-live="polite">
-        주요 알레르기 재료: {allergens.join(", ") || "표기 대상 없음"}. 같은 조리 공간에서 다른 알레르기 재료를 취급합니다.
-      </div>
-      <div className="dialog-bottom pv-buy">
-        <div className="qty">
-          <button type="button" aria-label="수량 줄이기" disabled={qty === 1} onClick={() => setQty((q) => Math.max(1, q - 1))}>
-            −
-          </button>
-          <span aria-live="polite">{qty}</span>
-          <button type="button" aria-label="수량 늘리기" disabled={qty === 99} onClick={() => setQty((q) => Math.min(99, q + 1))}>
-            +
+        {NUTRITION[p.id]?.kcal > 0 && (
+          <p className="pv-kcal" aria-live="polite">
+            선택한 구성 약{" "}
+            <b>
+              {NUTRITION[p.id].kcal +
+                (DRESSING_KCAL[dressing] ?? 0) +
+                drinks.reduce((n, i) => n + (DRINK_KCAL[i] ?? 0), 0)}
+              kcal
+            </b>
+            <span>영양 예시 값 · 추가 토핑 영양은 포함되지 않습니다.</span>
+          </p>
+        )}
+        <div className="allergen-box">
+          주요 알레르기 재료:{" "}
+          {[
+            ...new Set([
+              ...p.allergens,
+              ...(DRESSINGS[dressing]?.allergens ?? []),
+            ]),
+          ].join(", ") || "표기 대상 없음"}
+        </div>
+        <div className="dialog-bottom pv-buy">
+          <div className="qty">
+            <button
+              type="button"
+              disabled={qty === 1}
+              aria-label="수량 줄이기"
+              onClick={() => setQty(qty - 1)}
+            >
+              −
+            </button>
+            <span>{qty}</span>
+            <button
+              type="button"
+              disabled={qty === 99}
+              aria-label="수량 늘리기"
+              onClick={() => setQty(qty + 1)}
+            >
+              +
+            </button>
+          </div>
+          <button
+            className="primary"
+            type="submit"
+            disabled={p.status !== "active" || !complete}
+          >
+            {p.status === "soldout"
+              ? "품절"
+              : money((p.price + optionPrice) * qty) + " · 담기"}
           </button>
         </div>
-        <button
-          className="primary"
-          type="button"
-          onClick={(e) => {
-            add({ id: p.id, dressing, drinks, qty });
-            open(e.currentTarget);
-          }}
-        >
-          {money(unitPrice(p.id, drinks) * qty)} · 담기
-        </button>
-      </div>
+      </form>
     </>
   );
 }

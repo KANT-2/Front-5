@@ -1,5 +1,6 @@
 "use client";
 
+import { useCustomerCatalog } from "./CustomerCatalogProvider";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useCart } from "./CartProvider";
@@ -7,7 +8,7 @@ import FoodImage from "./FoodImage";
 import OrderSuccessDialog, { type OrderSummary } from "./OrderSuccessDialog";
 import { useToast } from "./ToastProvider";
 import type { DeliveryHours } from "@/lib/data/delivery";
-import { isCustom, itemAllergens, itemKey, itemName, itemOptions, itemUnitPrice } from "@/lib/cart";
+import { isCustom, itemKey } from "@/lib/cart";
 import {
   DELIVERY_AREA_LABEL,
   FREE_DELIVERY_FROM,
@@ -111,6 +112,7 @@ interface BodyProps {
 }
 
 function CartBody({ openedAt, hours, closeBtn, onOrdered }: BodyProps) {
+  const {itemAllergens,itemName,itemOptions,itemUnitPrice,itemAvailable}=useCustomerCatalog();
   const { items, count, update, remove, clear, close } = useCart();
   const toast = useToast();
   const [date, setDate] = useState("");
@@ -125,6 +127,7 @@ function CartBody({ openedAt, hours, closeBtn, onOrdered }: BodyProps) {
   const options = timeOptions(day, openedAt, hours);
   const slot = options.find((o) => o.value === time) ?? options[0];
 
+  const unavailable = items.some(i => !itemAvailable(i));
   const subtotal = items.reduce((n, i) => n + itemUnitPrice(i) * i.qty, 0);
   const fee = items.length ? deliveryFee(subtotal) : 0;
   // 배달 주문이 안 되는 이유 (없으면 빈 문자열)
@@ -148,6 +151,7 @@ function CartBody({ openedAt, hours, closeBtn, onOrdered }: BodyProps) {
 
   const submit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if(unavailable){toast("품절되거나 삭제된 메뉴·옵션을 제거해주세요.");return;}
     if (!items.length || deliveryIssue) return;
     if (!slot) {
       toast("받을 시간대를 선택해주세요");
@@ -297,7 +301,8 @@ function CartBody({ openedAt, hours, closeBtn, onOrdered }: BodyProps) {
             {deliveryIssue}
           </p>
         )}
-        <button className="primary full" type="submit" disabled={!items.length || !!deliveryIssue}>
+        {unavailable&&<p className="order-issue" role="status">품절되거나 제공이 종료된 메뉴·옵션이 있습니다. 해당 항목을 제거하거나 다시 선택해주세요.</p>}
+        <button className="primary full" type="submit" disabled={!items.length || !!deliveryIssue || unavailable}>
           체험 주문 완료하기 →
         </button>
       </form>

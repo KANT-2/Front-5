@@ -1,6 +1,7 @@
 /** bowl match 재료 카드 하나 */
 export interface Ingredient {
   id: string;
+  image?: string;
   name: string;
   en: string;
   desc: string;
@@ -18,7 +19,7 @@ export interface Ingredient {
 export type Stage = "GREENS" | "PROTEIN" | "VEGGIES" | "TOPPINGS";
 
 // 지금은 코드 안의 고정 데이터. DB 로 옮길 때는 getIngredients() 안만 바꾸면 된다.
-const INGREDIENTS: Ingredient[] = [
+export const INGREDIENTS: Ingredient[] = [
   {
     id: "romaine",
     name: "아삭한 로메인",
