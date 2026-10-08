@@ -6,7 +6,7 @@ import Header from "@/components/Header";
 import ReviewsProvider from "@/components/ReviewsProvider";
 import ToastProvider from "@/components/ToastProvider";
 import { getDeliveryHours } from "@/lib/data/delivery";
-import "./globals.css";
+import "../globals.css";
 
 export const metadata: Metadata = {
   title: "leaf & bowl — 오늘의 신선한 한 그릇",
