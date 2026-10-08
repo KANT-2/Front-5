@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useCart } from "./CartProvider";
 import { MATCH_URL } from "@/lib/products";
@@ -103,9 +104,9 @@ export default function MatchFloat() {
           <br />
           나만의 샐러드
         </p>
-        <a ref={startRef} className="mf-start" href={MATCH_URL} aria-label="내 취향 찾기 시작하기">
+        <Link ref={startRef} className="mf-start" href={MATCH_URL} aria-label="내 취향 찾기 시작하기">
           시작하기 ♡
-        </a>
+        </Link>
         <button type="button" className="mf-close" aria-label="배너 접기" onClick={() => toggle(true)}>
           ×
         </button>
