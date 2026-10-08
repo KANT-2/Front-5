@@ -772,12 +772,15 @@ function BowlMatchBody({ingredients}:{ingredients:Ingredient[]}) {
                 value={dressing}
                 onChange={(e) => setDressing(Number(e.target.value))}
               >
-                {DRESSINGS.map((d, n) => (
-                  <option key={d.name} value={n}>
-                    {d.name}
-                    {d.allergens.length ? ` (${d.allergens.join(", ")})` : ""}
-                  </option>
-                ))}
+                {DRESSINGS.map((d, n) =>
+                  d.name ? (
+                    <option key={d.id} value={n} disabled={!d.available}>
+                      {d.name}
+                      {d.allergens.length ? ` (${d.allergens.join(", ")})` : ""}
+                      {d.available ? "" : " · 품절"}
+                    </option>
+                  ) : null,
+                )}
               </select>
             </label>
             <div className="allergen-box">
