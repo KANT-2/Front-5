@@ -5,6 +5,7 @@ import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import ReviewsProvider from "@/components/ReviewsProvider";
 import ToastProvider from "@/components/ToastProvider";
+import { getDeliveryHours } from "@/lib/data/delivery";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,7 +17,8 @@ export const viewport: Viewport = {
   themeColor: "#194B38",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const hours = await getDeliveryHours();
   return (
     <html lang="ko" data-scroll-behavior="smooth">
       <body>
@@ -27,7 +29,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <Header />
               {children}
               <Footer />
-              <CartDrawer />
+              <CartDrawer hours={hours} />
             </CartProvider>
           </ReviewsProvider>
         </ToastProvider>

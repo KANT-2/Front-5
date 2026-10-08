@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import PageHeading from "./PageHeading";
 import ProductCard from "./ProductCard";
 import { useReviews } from "./ReviewsProvider";
 import { NUTRITION, PRODUCTS, type Category, type Product } from "@/lib/products";
@@ -62,11 +63,11 @@ export default function MenuSection() {
   };
 
   return (
-    <section className="section wrap" id="menu">
+    <section className="menu-page" id="menu">
       <div className="section-title">
         <div>
           <div className="eyebrow">FIND YOUR DAILY BOWL</div>
-          <h2>매일 먹고 싶은 메뉴</h2>
+          <PageHeading>매일 먹고 싶은 메뉴</PageHeading>
         </div>
         <label className="search">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
@@ -126,7 +127,7 @@ export default function MenuSection() {
       </div>
       <div className="product-grid">
         {shown.length ? (
-          shown.map((p) => <ProductCard key={p.id} product={p} />)
+          shown.map((p, i) => <ProductCard key={p.id} product={p} eager={i < 4} />)
         ) : (
           <div className="empty" style={{ gridColumn: "1/-1" }}>
             조건에 맞는 메뉴가 없어요. 검색어나 필터를 줄여보세요.

@@ -2,15 +2,16 @@ import Link from "next/link";
 import FoodImage from "@/components/FoodImage";
 import HeroCarousel from "@/components/HeroCarousel";
 import MatchFloat from "@/components/MatchFloat";
-import MenuSection from "@/components/MenuSection";
 import ProductCard from "@/components/ProductCard";
 import ReviewRotator from "@/components/ReviewRotator";
+import { getHeroSlides } from "@/lib/data/hero";
 import { MATCH_URL, PRODUCTS } from "@/lib/products";
 
-export default function Home() {
+export default async function Home() {
+  const slides = await getHeroSlides();
   return (
     <main>
-      <HeroCarousel />
+      <HeroCarousel slides={slides} />
 
       <section className="section wrap" id="best">
         <div className="section-title">
@@ -20,7 +21,7 @@ export default function Home() {
               Best bowls<span>자꾸 생각나는 한 그릇</span>
             </h2>
           </div>
-          <Link href="/#menu">전체 메뉴 보기 ↗</Link>
+          <Link href="/menu">전체 메뉴 보기 ↗</Link>
         </div>
         <div className="product-grid">
           {PRODUCTS.slice(0, 4).map((p) => (
@@ -59,8 +60,6 @@ export default function Home() {
           <span>산뜻함 위에, 부드러움 한 스푼.</span>
         </div>
       </section>
-
-      <MenuSection />
 
       <section className="section reviews wrap" id="reviews" aria-labelledby="reviewsTitle">
         <ReviewRotator />

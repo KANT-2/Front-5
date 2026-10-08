@@ -6,6 +6,7 @@ import { useCart } from "./CartProvider";
 import FoodImage from "./FoodImage";
 import OrderSuccessDialog, { type OrderSummary } from "./OrderSuccessDialog";
 import { useToast } from "./ToastProvider";
+import type { DeliveryHours } from "@/lib/data/delivery";
 import { isCustom, itemAllergens, itemKey, itemName, itemOptions, itemUnitPrice } from "@/lib/cart";
 import {
   DELIVERY_AREA_LABEL,
@@ -31,10 +32,10 @@ interface TimeOption {
   label: string;
 }
 
-/** 10:00~21:00 한 시간 단위 중 지금부터 30분 이후에 시작하는 시간대만. */
-function timeOptions(day: string, now: number): TimeOption[] {
+/** 배달 운영 시간 안의 한 시간 단위 중 지금부터 30분 이후에 시작하는 시간대만. */
+function timeOptions(day: string, now: number, { open, close }: DeliveryHours): TimeOption[] {
   const list: TimeOption[] = [];
-  for (let h = 10; h < 21; h++) {
+  for (let h = open; h < close; h++) {
     const start = `${pad(h)}:00`;
     const end = `${pad(h + 1)}:00`;
     if (new Date(`${day}T${start}`).getTime() > now + 30 * 60000) list.push({ value: start, label: `${start}–${end}` });
@@ -42,7 +43,7 @@ function timeOptions(day: string, now: number): TimeOption[] {
   return list;
 }
 
-export default function CartDrawer() {
+export default function CartDrawer({ hours }: { hours: DeliveryHours }) {
   const { isOpen, openedAt, close } = useCart();
   const drawer = useRef<HTMLElement>(null);
   const closeBtn = useRef<HTMLButtonElement>(null);
@@ -95,7 +96,7 @@ export default function CartDrawer() {
         aria-hidden={!isOpen}
         inert={!isOpen}
       >
-        {openedAt !== null && <CartBody openedAt={openedAt} closeBtn={closeBtn} onOrdered={setOrder} />}
+        {openedAt !== null && <CartBody openedAt={openedAt} hours={hours} closeBtn={closeBtn} onOrdered={setOrder} />}
       </aside>
       <OrderSuccessDialog order={order} onClosed={() => setOrder(null)} />
     </>
@@ -104,11 +105,12 @@ export default function CartDrawer() {
 
 interface BodyProps {
   openedAt: number;
+  hours: DeliveryHours;
   closeBtn: React.RefObject<HTMLButtonElement | null>;
   onOrdered: (order: OrderSummary) => void;
 }
 
-function CartBody({ openedAt, closeBtn, onOrdered }: BodyProps) {
+function CartBody({ openedAt, hours, closeBtn, onOrdered }: BodyProps) {
   const { items, count, update, remove, clear, close } = useCart();
   const toast = useToast();
   const [date, setDate] = useState("");
@@ -120,7 +122,7 @@ function CartBody({ openedAt, closeBtn, onOrdered }: BodyProps) {
   const minDate = dateValue(openedAt, 0);
   const maxDate = dateValue(openedAt, 14);
   const day = date >= minDate && date <= maxDate ? date : dateValue(openedAt, 1);
-  const options = timeOptions(day, openedAt);
+  const options = timeOptions(day, openedAt, hours);
   const slot = options.find((o) => o.value === time) ?? options[0];
 
   const subtotal = items.reduce((n, i) => n + itemUnitPrice(i) * i.qty, 0);
@@ -227,7 +229,7 @@ function CartBody({ openedAt, closeBtn, onOrdered }: BodyProps) {
           <br />
           신선한 한 그릇을 골라보세요.
           <br />
-          <Link className="primary" href="/#menu" onClick={() => close(false)}>
+          <Link className="primary" href="/menu" onClick={() => close(false)}>
             메뉴 보러 가기 <span>↗</span>
           </Link>
         </div>
