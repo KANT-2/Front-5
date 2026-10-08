@@ -1,6 +1,6 @@
-import Image from "next/image";
 import Link from "next/link";
 import FoodImage from "@/components/FoodImage";
+import HeroCarousel from "@/components/HeroCarousel";
 import MatchFloat from "@/components/MatchFloat";
 import MenuSection from "@/components/MenuSection";
 import ProductCard from "@/components/ProductCard";
@@ -10,52 +10,7 @@ import { MATCH_URL, PRODUCTS } from "@/lib/products";
 export default function Home() {
   return (
     <main>
-      <section className="hero">
-        <div className="hero-inner wrap">
-          <div className="hero-copy">
-            <div className="eyebrow">FRESH BOWL, FRESH DAY</div>
-            <h1>
-              좋은 하루는,
-              <br />
-              좋은 한 그릇에서.
-            </h1>
-            <p>
-              신선한 재료와 기분 좋은 조합.
-              <br />
-              오늘의 나를 위한 샐러드를 만나보세요.
-            </p>
-            <Link className="primary" href="/#menu">
-              오늘의 샐러드 고르기 <span>↗</span>
-            </Link>
-            <div className="hero-note">
-              LEMON CHICKEN BOWL <span>레몬 치킨 아보카도</span>
-            </div>
-          </div>
-          <div className="hero-photo">
-            <Image
-              src="/images/hero-cutout.png"
-              width={1024}
-              height={1024}
-              sizes="(max-width: 600px) 90vw, 57vw"
-              preload
-              loading="eager"
-              alt="레몬과 아보카도를 곁들인 구운 치킨 샐러드"
-            />
-            <div className="hero-sticker">
-              fresh
-              <br />
-              <i>feels good.</i>
-              <span>LEAF &amp; BOWL</span>
-            </div>
-          </div>
-        </div>
-        <div className="hero-bottom wrap">
-          <span>MAKE EVERY DAY A FRESH DAY</span>
-          <span>
-            01 <span className="line" /> 03
-          </span>
-        </div>
-      </section>
+      <HeroCarousel />
 
       <section className="section wrap" id="best">
         <div className="section-title">
@@ -109,7 +64,6 @@ export default function Home() {
 
       <section className="section reviews wrap" id="reviews" aria-labelledby="reviewsTitle">
         <ReviewRotator />
-        <p className="reviews-note">디자인을 보여주기 위한 예시 리뷰와 별점이며, 실제 고객이 작성한 후기가 아닙니다.</p>
       </section>
 
       <section className="match-banner wrap">

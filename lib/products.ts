@@ -116,11 +116,8 @@ export function deliveryFee(subtotal: number): number {
 export function inDeliveryArea(address: string): boolean {
   return DELIVERY_AREAS.some((a) => address.includes(a));
 }
-export const STORE_NAME = "시청점";
-// 체험용 가상 매장 정보. 영업시간은 장바구니 시간대(10:00~21:00)와 맞춘다.
-export const STORE_AREA = "서울 시청 인근";
-export const STORE_HOURS = "매일 10:00–21:00";
-export const STORE_PREP = "주문 후 약 15분 준비";
+// 배달 운영 시간. 장바구니 시간대(10:00~21:00)와 맞춘다.
+export const DELIVERY_HOURS = "매일 10:00–21:00";
 // 내 취향 찾기(bowl match): public/bowl-match/ 의 정적 페이지. public 폴더는 index.html 을 자동 제공하지 않아 파일명까지 쓴다.
 export const MATCH_URL = "/bowl-match/index.html";
 

@@ -148,9 +148,6 @@ export default function ReviewRotator() {
             />
           ))}
         </div>
-        <p className="rs-hint">
-          {reduced ? "점을 눌러 다른 메뉴 리뷰를 볼 수 있어요" : "마우스를 올리면 잠시 멈춰요 · 점을 눌러 다른 메뉴 리뷰를 볼 수 있어요"}
-        </p>
       </div>
     </>
   );

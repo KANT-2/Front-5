@@ -9,7 +9,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "leaf & bowl — 오늘의 신선한 한 그릇",
-  description: "오늘의 신선한 한 그릇, leaf & bowl. 샐러드를 고르고 픽업과 예약 배달을 체험해보세요.",
+  description: "오늘의 신선한 한 그릇, leaf & bowl. 샐러드를 고르고 예약 배달을 체험해보세요.",
 };
 
 export const viewport: Viewport = {

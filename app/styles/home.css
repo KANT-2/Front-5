@@ -1,25 +1,39 @@
 /* ===== 홈 ===== */
 .hero { background: var(--color-brand); overflow: hidden; }
+.hero-slides { display: grid; }
+.hero-inner { grid-area: 1 / 1; width: 100%; opacity: 0; visibility: hidden; transition: opacity .7s ease, visibility 0s linear .7s; }
+.hero-inner.is-active { opacity: 1; visibility: visible; transition: opacity .7s ease; }
 .hero-inner { display: grid; grid-template-columns: 43% 57%; min-height: 510px; position: relative; }
 .hero-copy { padding-top: 73px; z-index: 1; }
 .hero .eyebrow { color: var(--color-lime); }
-.hero h1 { font-size: clamp(36px, 4vw, 58px); line-height: 1.35; letter-spacing: -1.8px; font-weight: 700; color: var(--color-cream); margin: 24px 0 17px; }
+.hero .hero-title { font-size: clamp(36px, 4vw, 58px); line-height: 1.35; letter-spacing: -1.8px; font-weight: 700; color: var(--color-cream); margin: 24px 0 17px; }
 .hero p { font-size: 16px; line-height: 1.9; color: #d5e0d6; margin: 0 0 28px; }
-.hero-note { margin-top: 39px; font-size: 12px; letter-spacing: 1.4px; color: #d5e0d6; }
-.hero-note span { display: block; letter-spacing: 0; margin-top: 7px; font-size: 12px; }
 .hero-photo { position: relative; min-width: 0; display: flex; align-items: center; justify-content: center; margin: 0; }
-.hero-photo img { display: block; width: 100%; height: auto; max-height: 510px; aspect-ratio: 1; object-fit: contain; object-position: center; filter: drop-shadow(0 10px 12px #194b3820); }
+.hero-bowl { position: relative; width: 100%; max-width: 510px; }
+.hero-photo img { display: block; width: 100%; height: auto; aspect-ratio: 1; filter: drop-shadow(0 10px 12px #194b3820); }
+.hero-ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.hero-ring text { fill: var(--color-lime); font-size: 2.6px; letter-spacing: .55px; }
 .hero-sticker { position: absolute; right: 12px; top: 38px; width: 106px; height: 106px; background: #f8f6efde; color: var(--color-ink); border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; transform: rotate(12deg); font-size: 23px; line-height: 1; letter-spacing: -1px; }
 .hero-sticker i { font-family: var(--font-serif); font-size: 19px; }
 .hero-sticker span { font-size: 10px; margin-top: 12px; letter-spacing: 2px; }
 .hero-bottom { display: flex; justify-content: space-between; align-items: center; padding-bottom: 22px; font-size: 12px; letter-spacing: 1.8px; color: #d5e0d6; }
 .hero-bottom > span:last-child { display: flex; align-items: center; gap: 14px; }
 .line { width: 70px; height: 1px; background: #d5e0d6; }
+.hero-ctrl { display: flex; align-items: center; gap: 14px; }
+.hero-dots { display: flex; gap: 6px; }
+.hero-dots button { width: 34px; height: 24px; padding: 0; border: 0; background: none; cursor: pointer; display: flex; align-items: center; }
+.hero-bar { position: relative; display: block; width: 100%; height: 2px; background: #d5e0d659; overflow: hidden; }
+.hero-dots .is-active .hero-bar { background: #d5e0d68c; }
+.hero-bar::after { content: ""; position: absolute; inset: 0; background: var(--color-lime); transform: scaleX(0); transform-origin: left; }
+.hero-dots .is-active .hero-bar::after { transform: scaleX(1); }
+.hero-bar.is-running::after { animation: hero-progress linear both; animation-duration: inherit; }
+@keyframes hero-progress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.hero-dots button:hover .hero-bar { background: #d5e0d6; }
+.hero-pause { width: 28px; height: 28px; border-radius: 50%; border: 1px solid #d5e0d673; background: none; color: #d5e0d6; font-size: 9px; letter-spacing: -1px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.hero-pause:hover { border-color: #d5e0d6; }
+.hero-bottom button:focus-visible { outline: 2px solid var(--color-lime); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .hero-inner, .hero-inner.is-active { transition: none; } }
 
-.fulfillment { display: flex; align-items: center; gap: 36px; border-bottom: 1px solid var(--color-line); padding-top: 28px; padding-bottom: 28px; }
-.fulfillment strong { font-size: 23px; font-weight: 700; }
-.fulfillment-detail { margin-left: auto; color: #637561; font-size: 13px; }
-.fulfillment-detail span { margin-left: 18px; }
 
 .monthly { margin-top: 25px; margin-bottom: 10px; display: grid; grid-template-columns: 36% 36% 28%; background: var(--color-soft-2); border-radius: 5px; min-height: 300px; overflow: hidden; }
 .monthly-copy { padding: 40px 0; }
@@ -53,7 +67,6 @@
 /* 홈 리뷰: 제품별 자동 전환 */
 .reviews { border-top: 1px solid var(--color-line); margin-top: 30px; }
 .reviews .section-title > .rs-all { font-size: 13px; white-space: nowrap; flex: none; }
-.reviews-note { font-size: 12px; color: #7b8873; margin: 20px 0 0; line-height: 1.9; }
 .rs-stage { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: stretch; }
 .rs-stage.is-in > * { animation: rsIn .5s cubic-bezier(.22, .8, .26, 1) both; }
 @keyframes rsIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
@@ -92,11 +105,8 @@
 .rs-dots button.on { width: 34px; }
 .rs-dots button.on::before { width: 24px; background: var(--color-brand); }
 .rs-dots button:focus-visible { outline-offset: 0; }
-.rs-hint { text-align: center; font-size: 12px; color: #7b8873; margin: 6px 0 0; }
 
 @media (max-width: 1000px) {
-  .fulfillment { flex-wrap: wrap; }
-  .fulfillment-detail { margin-left: 0; }
   .rs-stage { grid-template-columns: minmax(0, 1fr); }
   .rs-product { padding: 12px 16px; }
   .rs-head { grid-template-columns: 120px minmax(0, 1fr); }
@@ -105,15 +115,14 @@
 @media (max-width: 900px) {
   .hero-inner { min-height: 450px; }
   .hero-copy { padding-top: 60px; }
-  .hero-photo img { max-height: 450px; }
+  .hero-bowl { max-width: 450px; }
   .hero-sticker { right: 5px; top: 35px; }
-  .fulfillment { gap: 18px; }
   .monthly { grid-template-columns: 45% 40% 15%; }
   .monthly-caption { display: none; }
   .monthly-food { grid-column: 2 / 4; }
 }
 @media (max-width: 700px) {
-  .hero h1 { font-size: 38px; }
+  .hero .hero-title { font-size: 38px; }
   .hero p { font-size: 15px; }
   .reviews .section-title { align-items: flex-start; }
   .reviews .section-title h2 { font-size: 24px; line-height: 1.5; }
@@ -127,22 +136,17 @@
   .announcement { font-size: 10px; }
   .hero-inner { display: flex; flex-direction: column; min-height: 0; }
   .hero-copy { padding-top: 35px; }
-  .hero h1 { margin: 15px 0 12px; }
+  .hero .hero-title { margin: 15px 0 12px; }
   .hero p { margin-bottom: 20px; }
   .hero .eyebrow { letter-spacing: 1.4px; }
-  .hero-note { font-size: 10px; margin-top: 24px; }
   .hero-photo { margin: 12px 0 0; width: 100%; align-self: center; max-width: 360px; }
-  .hero-photo img { max-height: 340px; }
+  .hero-bowl { max-width: 340px; }
+  .hero-ring text { font-size: 3.4px; letter-spacing: .5px; }
   .hero-sticker { width: 87px; height: 87px; right: 8px; top: 10px; font-size: 18px; }
   .hero-sticker i { font-size: 14px; }
   .hero-bottom { padding-top: 12px; padding-bottom: 18px; font-size: 10px; letter-spacing: .7px; }
-  .hero-bottom .line { width: 35px; }
-  .fulfillment { display: grid; grid-template-columns: 1fr; padding-top: 20px; padding-bottom: 20px; gap: 18px; }
-  .fulfillment strong { font-size: 22px; }
-  .fulfillment > .segmented { display: grid; grid-template-columns: 1fr 1fr; justify-self: stretch; }
-  .segmented button { font-size: 14px; padding: 12px 10px; }
-  .segmented button small { font-size: 12px; }
-  .fulfillment-detail { margin: 0; text-align: left; border-top: 1px solid var(--color-line); padding: 15px 0 0; font-size: 12px; }
+  .hero-dots button { width: 24px; }
+  .hero-ctrl { gap: 10px; }
   .monthly { margin-left: 14px; margin-right: 14px; padding: 24px 20px; grid-template-columns: minmax(0, 1fr); min-height: 0; }
   .monthly-copy { padding: 0; }
   .monthly h2 { font-size: 28px; margin: 18px 0 12px; }
@@ -163,7 +167,6 @@
   .reviews { margin-top: 12px; }
   .reviews .section-title { display: block; }
   .reviews .section-title > .rs-all { display: inline-flex; margin-top: 15px; }
-  .reviews-note { font-size: 11px; }
 }
 
 /* 내 취향 찾기 플로팅 배너 (홈 전용) */

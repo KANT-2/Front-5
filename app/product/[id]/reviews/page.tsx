@@ -33,7 +33,6 @@ export default async function ProductReviewsPage({ params }: PageProps<"/product
           <PageHeading>
             {p.name} <span>리뷰</span>
           </PageHeading>
-          <p>예시 리뷰와 직접 작성한 리뷰가 함께 표시돼요. 직접 쓴 리뷰는 이 브라우저에만 저장됩니다.</p>
         </div>
         <Link className="rv-back" href={`/product/${p.id}`}>
           <span className="rv-thumb">

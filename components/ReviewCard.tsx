@@ -2,7 +2,6 @@ import { PRODUCTS } from "@/lib/products";
 import { dateStr, type Review } from "@/lib/reviews";
 
 export default function ReviewCard({ review: r }: { review: Review }) {
-  const via = r.via === "delivery" ? "예약 배달" : "매장 픽업";
   return (
     <article className={`review-card${r.mine ? " is-mine" : ""}`}>
       <div className="review-top">
@@ -19,7 +18,7 @@ export default function ReviewCard({ review: r }: { review: Review }) {
       <h3>{r.title}</h3>
       <p>{r.text}</p>
       <span className="review-menu">
-        {PRODUCTS[r.pid].name} · {via}
+        {PRODUCTS[r.pid].name}
       </span>
       <div className="review-author">
         <span className="review-avatar" aria-hidden="true">
