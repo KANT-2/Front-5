@@ -1,10 +1,12 @@
 "use client";
 
+import Image from "next/image";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useReviews } from "./ReviewsProvider";
 import { useToast } from "./ToastProvider";
 import {useCustomerCatalog} from "./CustomerCatalogProvider";
-import { RATE_LABELS, dateStr, type Review } from "@/lib/reviews";
+import { shrinkImage } from "@/lib/image";
+import { RATE_LABELS, REVIEW_PHOTO_MAX, dateStr, type Review } from "@/lib/reviews";
 
 const len = (s: string) => [...s].length;
 
@@ -67,6 +69,9 @@ function WriteDialog({ fixedPid, onAdded, onClosed }: DialogProps) {
   const { addReview } = useReviews();
   const {visibleProducts: PRODUCTS, getProduct}=useCustomerCatalog();
   const [saving,setSaving]=useState(false);
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [reading, setReading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
   const dialog = useRef<HTMLDialogElement>(null);
   const menuRef = useRef<HTMLSelectElement>(null);
@@ -84,7 +89,7 @@ function WriteDialog({ fixedPid, onAdded, onClosed }: DialogProps) {
   const [msg, setMsg] = useState("");
   const [asking, setAsking] = useState(false);
 
-  const dirty = stars > 0 || !!nick.trim() || !!title.trim() || !!text.trim();
+  const dirty = stars > 0 || !!nick.trim() || !!title.trim() || !!text.trim() || photos.length > 0;
   const product = pid === null ? null : getProduct(pid);
 
   useEffect(() => {
@@ -100,6 +105,25 @@ function WriteDialog({ fixedPid, onAdded, onClosed }: DialogProps) {
   }, [asking]);
 
   const close = () => dialog.current?.close();
+
+  const addPhotos = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const room = REVIEW_PHOTO_MAX - photos.length;
+    const list = [...files].slice(0, room);
+    if (files.length > room) toast(`사진은 ${REVIEW_PHOTO_MAX}장까지 올릴 수 있어요`);
+    setReading(true);
+    const done: string[] = [];
+    for (const f of list) {
+      try {
+        done.push(await shrinkImage(f));
+      } catch {
+        toast("읽을 수 없는 사진이 있어요. JPG·PNG 사진을 올려주세요");
+      }
+    }
+    setPhotos((cur) => [...cur, ...done].slice(0, REVIEW_PHOTO_MAX));
+    setReading(false);
+    if (fileRef.current) fileRef.current.value = "";
+  };
   const requestClose = () => {
     if (saving) return;
     if (dirty) setAsking(true);
@@ -148,7 +172,7 @@ function WriteDialog({ fixedPid, onAdded, onClosed }: DialogProps) {
     };
     setSaving(true);
     try {
-      await addReview(review);
+      await addReview(review, photos);
       toast("리뷰가 등록되었어요");
       close();
       onAdded(review);
@@ -264,6 +288,33 @@ function WriteDialog({ fixedPid, onAdded, onClosed }: DialogProps) {
           />
         </label>
 
+        <div className="field rw-photos">
+          <span>
+            사진 <small>선택 · 최대 {REVIEW_PHOTO_MAX}장</small>
+          </span>
+          <div className="rw-photo-list">
+            {photos.map((src, k) => (
+              <div className="rw-photo" key={k}>
+                <Image src={src} alt={`첨부 사진 ${k + 1}`} width={80} height={80} unoptimized />
+                <button
+                  type="button"
+                  aria-label={`첨부 사진 ${k + 1} 빼기`}
+                  onClick={() => setPhotos((cur) => cur.filter((_, i) => i !== k))}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            {photos.length < REVIEW_PHOTO_MAX && (
+              <button type="button" className="rw-photo-add" disabled={reading || saving} onClick={() => fileRef.current?.click()}>
+                <span aria-hidden="true">＋</span>
+                {reading ? "불러오는 중" : "사진 추가"}
+              </button>
+            )}
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => void addPhotos(e.target.files)} />
+        </div>
+
         <div className="rw-foot">
           {asking ? (
             <div className="rw-confirm" role="alertdialog" aria-label="작성 취소 확인">
@@ -282,7 +333,7 @@ function WriteDialog({ fixedPid, onAdded, onClosed }: DialogProps) {
               <p className="rv-msg" role="alert">
                 {msg}
               </p>
-              <button className="primary" type="submit" disabled={saving}>
+              <button className="primary" type="submit" disabled={saving || reading}>
                 {saving ? "저장 중…" : "리뷰 등록하기"}
               </button>
             </>
