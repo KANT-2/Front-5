@@ -12,7 +12,7 @@ export interface MenuItem {
   qty: number;
 }
 
-/** bowl match 에서 재료를 골라 만든 커스텀 볼 (public/bowl-match/app.js 가 같은 모양으로 저장한다) */
+/** bowl match(/match) 에서 재료를 골라 만든 커스텀 볼 */
 export interface CustomItem {
   kind: "custom";
   name: string;

@@ -116,8 +116,8 @@ export function deliveryFee(subtotal: number): number {
 export function inDeliveryArea(address: string): boolean {
   return DELIVERY_AREAS.some((a) => address.includes(a));
 }
-// 내 취향 찾기(bowl match): public/bowl-match/ 의 정적 페이지. public 폴더는 index.html 을 자동 제공하지 않아 파일명까지 쓴다.
-export const MATCH_URL = "/bowl-match/index.html";
+// 내 취향 찾기(bowl match) 페이지
+export const MATCH_URL = "/match";
 
 export function money(v: number): string {
   return v.toLocaleString("ko-KR") + "원";

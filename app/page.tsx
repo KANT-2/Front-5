@@ -71,9 +71,9 @@ export default async function Home() {
           <h2>내 취향대로, 한 번 더 새롭게.</h2>
           <p>좋아하는 재료에 하트를 보내고 나만의 샐러드를 만들어보세요.</p>
         </div>
-        <a className="primary" href={MATCH_URL}>
+        <Link className="primary" href={MATCH_URL}>
           bowl match 시작하기 ♡
-        </a>
+        </Link>
       </section>
 
       <section className="allergy wrap">

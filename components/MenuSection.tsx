@@ -1,10 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import PageHeading from "./PageHeading";
 import ProductCard from "./ProductCard";
 import { useReviews } from "./ReviewsProvider";
-import { NUTRITION, PRODUCTS, type Category, type Product } from "@/lib/products";
+import { MATCH_URL, NUTRITION, PRODUCTS, type Category, type Product } from "@/lib/products";
 
 type Filter = "all" | Exclude<Category, "other">;
 
@@ -135,9 +136,21 @@ export default function MenuSection() {
             <button type="button" className="ghost-btn empty-reset" onClick={resetAll}>
               조건 모두 지우기
             </button>
+            <Link className="empty-match" href={MATCH_URL}>
+              원하는 재료로 직접 만들기 ♡
+            </Link>
           </div>
         )}
       </div>
+      <aside className="menu-match" aria-label="내 취향 찾기 안내">
+        <div>
+          <strong>원하는 조합이 없다면?</strong>
+          <p>좋아하는 재료에 하트를 보내고 나만의 샐러드를 만들어보세요.</p>
+        </div>
+        <Link className="primary" href={MATCH_URL}>
+          내 취향 찾기 <span>♡</span>
+        </Link>
+      </aside>
       <p className="ingredient-note">모든 메뉴는 드레싱을 선택할 수 있어요. 음료는 메뉴 선택 후 추가할 수 있습니다.</p>
     </section>
   );
