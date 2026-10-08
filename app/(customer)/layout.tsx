@@ -1,3 +1,7 @@
+import { publicSnapshot } from "@/lib/customer/catalog";
+import { connection } from "next/server";
+import { readCatalog } from "@/lib/admin/store";
+import CustomerCatalogProvider from "@/components/CustomerCatalogProvider";
 import type { Metadata, Viewport } from "next";
 import CartDrawer from "@/components/CartDrawer";
 import CartProvider from "@/components/CartProvider";
@@ -8,6 +12,8 @@ import ReviewsProvider from "@/components/ReviewsProvider";
 import ToastProvider from "@/components/ToastProvider";
 import { getDeliveryHours } from "@/lib/data/delivery";
 import "../globals.css";
+
+export const instant = false;
 
 export const metadata: Metadata = {
   title: "leaf & bowl — 오늘의 신선한 한 그릇",
@@ -20,12 +26,15 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
+  await connection();
+  const snapshot = await readCatalog();
   const hours = await getDeliveryHours();
   return (
     <html lang="ko" data-scroll-behavior="smooth">
       <body>
-        <ToastProvider>
+        <CustomerCatalogProvider initial={publicSnapshot(snapshot)}><ToastProvider>
           <ReviewsProvider>
+
             <ReviewWriteProvider>
               <CartProvider>
                 <div className="announcement">
@@ -33,12 +42,13 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
                 </div>
                 <Header />
                 {children}
-                <Footer />
+                <Footer hours={hours} />
                 <CartDrawer hours={hours} />
               </CartProvider>
             </ReviewWriteProvider>
+
           </ReviewsProvider>
-        </ToastProvider>
+        </ToastProvider></CustomerCatalogProvider>
       </body>
     </html>
   );

@@ -1,20 +1,16 @@
 "use client";
 
+import { useCustomerCatalog } from "./CustomerCatalogProvider";
 import Link from "next/link";
 import { useState } from "react";
 import PageHeading from "./PageHeading";
 import ProductCard from "./ProductCard";
 import { useReviews } from "./ReviewsProvider";
-import { MATCH_URL, NUTRITION, PRODUCTS, type Category, type Product } from "@/lib/products";
+import { MATCH_URL, type Product } from "@/lib/products";
 
-type Filter = "all" | Exclude<Category, "other">;
+type Filter = string;
 
-const FILTERS: { key: Filter; label: string; badge?: string }[] = [
-  { key: "all", label: "전체 메뉴" },
-  { key: "protein", label: "든든한 단백질" },
-  { key: "vegan", label: "플랜트 베이스" },
-  { key: "new", label: "새로운 조합", badge: "NEW" },
-];
+
 
 type SortKey = "default" | "priceLow" | "priceHigh" | "kcalLow" | "proteinHigh" | "rating";
 
@@ -29,9 +25,13 @@ const SORTS: { key: SortKey; label: string }[] = [
 
 // 메뉴에 실제로 있는 알레르기만 (보여주는 순서 고정)
 const ALLERGEN_ORDER = ["닭고기", "연어", "새우", "대두", "우유", "쇠고기", "참치", "밀", "계란", "생선", "토마토"];
-const ALLERGENS = ALLERGEN_ORDER.filter((a) => PRODUCTS.some((p) => p.allergens.includes(a)));
+
 
 export default function MenuSection() {
+  const { NUTRITION } = useCustomerCatalog();
+  const { catalog, visibleProducts } = useCustomerCatalog();
+  const FILTERS = [{key:"all",label:"전체 메뉴"},...(catalog.categories??[]).map(label=>({key:label,label}))];
+  const ALLERGENS = [...new Set([...ALLERGEN_ORDER,...visibleProducts.flatMap(p=>p.allergens)])].filter(a=>visibleProducts.some(p=>p.allergens.includes(a)));
   const { statsFor } = useReviews();
   const [filter, setFilter] = useState<Filter>("all");
   const [term, setTerm] = useState("");
@@ -40,9 +40,9 @@ export default function MenuSection() {
   const [showAllergy, setShowAllergy] = useState(false);
 
   const q = term.trim().toLowerCase();
-  const found = PRODUCTS.filter(
+  const found = visibleProducts.filter(
     (p) =>
-      (filter === "all" || p.category === filter) &&
+      (filter === "all" || p.categoryLabel === filter) &&
       `${p.name} ${p.en} ${p.ingredients}`.toLowerCase().includes(q) &&
       !p.allergens.some((a) => excluded.includes(a)),
   );
@@ -82,7 +82,7 @@ export default function MenuSection() {
         {FILTERS.map((f) => (
           <button key={f.key} type="button" className={filter === f.key ? "active" : ""} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>
             {f.label}
-            {f.badge && <span>{f.badge}</span>}
+            {false && <span>NEW</span>}
           </button>
         ))}
       </div>

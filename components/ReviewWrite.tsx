@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useReviews } from "./ReviewsProvider";
 import { useToast } from "./ToastProvider";
-import { PRODUCTS } from "@/lib/products";
+import {useCustomerCatalog} from "./CustomerCatalogProvider";
 import { RATE_LABELS, dateStr, type Review } from "@/lib/reviews";
 
 const len = (s: string) => [...s].length;
@@ -65,6 +65,8 @@ interface DialogProps {
  */
 function WriteDialog({ fixedPid, onAdded, onClosed }: DialogProps) {
   const { addReview } = useReviews();
+  const {visibleProducts: PRODUCTS, getProduct}=useCustomerCatalog();
+  const [saving,setSaving]=useState(false);
   const toast = useToast();
   const dialog = useRef<HTMLDialogElement>(null);
   const menuRef = useRef<HTMLSelectElement>(null);
@@ -83,7 +85,7 @@ function WriteDialog({ fixedPid, onAdded, onClosed }: DialogProps) {
   const [asking, setAsking] = useState(false);
 
   const dirty = stars > 0 || !!nick.trim() || !!title.trim() || !!text.trim();
-  const product = pid === null ? null : PRODUCTS[pid];
+  const product = pid === null ? null : getProduct(pid);
 
   useEffect(() => {
     const d = dialog.current;
@@ -99,16 +101,18 @@ function WriteDialog({ fixedPid, onAdded, onClosed }: DialogProps) {
 
   const close = () => dialog.current?.close();
   const requestClose = () => {
+    if (saving) return;
     if (dirty) setAsking(true);
     else close();
   };
 
-  const submit = (e: React.FormEvent<HTMLFormElement>) => {
+  const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if(saving)return;
     const tTitle = title.trim();
     const tText = text.trim();
     const tNick = nick.trim();
-    if (pid === null) {
+    if (pid === null || !getProduct(pid)) {
       setMsg("리뷰를 남길 메뉴를 선택해주세요.");
       menuRef.current?.focus();
       return;
@@ -142,10 +146,14 @@ function WriteDialog({ fixedPid, onAdded, onClosed }: DialogProps) {
       sample: false,
       mine: true,
     };
-    addReview(review);
-    toast("리뷰가 등록되었어요");
-    close();
-    onAdded(review);
+    setSaving(true);
+    try {
+      await addReview(review);
+      toast("리뷰가 등록되었어요");
+      close();
+      onAdded(review);
+    } catch {setMsg("리뷰를 저장하지 못했습니다. 다시 시도해주세요.");}
+    finally {setSaving(false);}
   };
 
   const painted = hover || stars;
@@ -274,8 +282,8 @@ function WriteDialog({ fixedPid, onAdded, onClosed }: DialogProps) {
               <p className="rv-msg" role="alert">
                 {msg}
               </p>
-              <button className="primary" type="submit">
-                리뷰 등록하기
+              <button className="primary" type="submit" disabled={saving}>
+                {saving ? "저장 중…" : "리뷰 등록하기"}
               </button>
             </>
           )}

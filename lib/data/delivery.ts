@@ -10,7 +10,6 @@ const DELIVERY_HOURS: DeliveryHours = { days: "매일", open: 10, close: 21 };
 
 /** 배달 운영 시간을 가져온다. */
 export async function getDeliveryHours(): Promise<DeliveryHours> {
-  "use cache";
   return DELIVERY_HOURS;
 }
 

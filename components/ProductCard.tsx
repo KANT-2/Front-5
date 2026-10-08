@@ -1,23 +1,27 @@
 "use client";
 
+import { useCustomerCatalog } from "./CustomerCatalogProvider";
 import Link from "next/link";
 import { useCart } from "./CartProvider";
 import FoodImage from "./FoodImage";
 import { useReviews } from "./ReviewsProvider";
-import { DRESSINGS, NUTRITION, money, type Product } from "@/lib/products";
+import { money, type Product } from "@/lib/products";
 
 export const CARD_SIZES = "(max-width: 600px) 50vw, (max-width: 1240px) 25vw, 300px";
 
 /**
  * 메뉴 카드. 제품명 링크가 카드 전체를 덮어(::after) 어디를 눌러도 상세로 가고,
- * "+" 버튼만 그 위에 올라가 기본 옵션(첫 번째 드레싱, 음료 없음, 1개)으로 바로 담고 장바구니를 연다.
+ * "+" 버튼은 연결된 필수 옵션의 첫 판매 항목을 골라 1개 담고 장바구니를 연다.
  */
 export default function ProductCard({ product: p, eager = false }: { product: Product; eager?: boolean }) {
+  const { NUTRITION, defaultItem } = useCustomerCatalog();
   const s = useReviews().statsFor(p.id);
   const { add, open } = useCart();
 
+  const initialItem = defaultItem(p.id);
   const quickAdd = (e: React.MouseEvent<HTMLButtonElement>) => {
-    add({ id: p.id, dressing: 0, drinks: [], qty: 1 });
+    if(!initialItem)return;
+    add(initialItem);
     open(e.currentTarget);
   };
 
@@ -25,12 +29,13 @@ export default function ProductCard({ product: p, eager = false }: { product: Pr
     <div className="product">
       <div className="product-photo">
         <FoodImage id={p.id} sizes={CARD_SIZES} eager={eager} />
-        {p.tag && <span className="product-tag">{p.tag}</span>}
+        {(p.tag||p.status==='soldout') && <span className="product-tag">{p.status==='soldout'?'품절':p.tag}</span>}
         <button
           type="button"
           className="quick-add"
-          aria-label={`${p.name} 바로 담기 (${DRESSINGS[0].name} 드레싱, 1개)`}
+          aria-label={`${p.name} 기본 옵션으로 바로 담기 (1개)`}
           title="기본 옵션으로 바로 담기"
+          disabled={!initialItem}
           onClick={quickAdd}
         >
           +

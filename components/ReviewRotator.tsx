@@ -1,5 +1,6 @@
 "use client";
 
+import { useCustomerCatalog } from "./CustomerCatalogProvider";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import FoodImage from "./FoodImage";
@@ -7,16 +8,18 @@ import ReviewCard from "./ReviewCard";
 import { useReviews } from "./ReviewsProvider";
 import StarRating from "./StarRating";
 import { useReducedMotion } from "@/lib/hooks";
-import { PRODUCTS } from "@/lib/products";
+
 import { newest } from "@/lib/reviews";
 
 /** 다음 제품으로 넘어가기까지의 시간 (밀리초) */
 export const ROTATE_MS = 6000;
 
-const TOTAL = PRODUCTS.length;
+
 const two = (n: number) => String(n).padStart(2, "0");
 
 export default function ReviewRotator() {
+  const { visibleProducts: PRODUCTS } = useCustomerCatalog();
+  const TOTAL = PRODUCTS.length;
   const { reviewsFor, statsFor } = useReviews();
   const reduced = useReducedMotion();
   // 첫 렌더는 서버와 같게 항상 첫 번째 제품
@@ -60,7 +63,8 @@ export default function ReviewRotator() {
   };
 
   const paused = hover || focus || !visible || pageHidden;
-  const p = PRODUCTS[index];
+  const p = PRODUCTS[index % Math.max(TOTAL,1)];
+  if (!p) return null;
   const s = statsFor(p.id);
   const list = [...reviewsFor(p.id)].sort(newest).slice(0, 3);
 

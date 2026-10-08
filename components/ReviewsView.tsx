@@ -10,7 +10,8 @@ import { useReviewWrite } from "./ReviewWrite";
 import { useReviews } from "./ReviewsProvider";
 import StarRating from "./StarRating";
 import { useReducedMotion } from "@/lib/hooks";
-import { PRODUCTS, money } from "@/lib/products";
+import {useCustomerCatalog} from "./CustomerCatalogProvider";
+import { money } from "@/lib/products";
 import { SORTERS, SORT_LABELS, statsOf, type SortKey } from "@/lib/reviews";
 
 const PAGE = 10;
@@ -33,7 +34,8 @@ export default function ReviewsView({ pid }: { pid: number | null }) {
   const writeBtn = useRef<HTMLButtonElement>(null);
   const focusFrom = useRef<number | null>(null);
 
-  const product = pid === null ? null : PRODUCTS[pid];
+  const {visibleProducts: PRODUCTS, getProduct}=useCustomerCatalog();
+  const product = pid === null ? null : getProduct(pid);
   const all = pid === null ? allReviews : reviewsFor(pid);
   const s = statsOf(all);
   const list = all.filter((r) => star === null || r.stars === star).sort(SORTERS[sort]);
