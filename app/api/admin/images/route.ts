@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { dataDirectory } from '@/admin-lib/store';
-import { jsonError, sameOrigin, readLimited, BodyTooLarge } from '@/admin-lib/server';
+import { dataDirectory } from '@/lib/admin/store';
+import { jsonError, sameOrigin, readLimited, BodyTooLarge } from '@/lib/admin/server';
 export async function POST(request: Request) { if (!sameOrigin(request))
     return jsonError('허용되지 않은 요청입니다.', 403); try {
 

@@ -13,7 +13,7 @@
 로그인 기능은 아직 없다. 관리자 경로/API는 개발 확인용이며 운영 공개 전에 인증을 연결해야 한다.
 
 ## 저장소
-현재 로컬 관리자 데이터는 admin-lib/imported-catalog.json에 초기값으로 이관했다.
+현재 로컬 관리자 데이터는 lib/admin/imported-catalog.json에 초기값으로 이관했다.
 서버 데이터/업로드는 ADMIN_DATA_DIR 환경변수 경로(기본 .data/admin)에 저장된다.
 릴리스 디렉터리가 교체되는 배포에서는 ADMIN_DATA_DIR을 고정 절대 경로로 설정해야 데이터가 유지된다.
 이미지 POST 5MB 제한, 파일 시그니처 검사, catalog revision을 통한 동시 저장 충돌 방지를 유지한다.

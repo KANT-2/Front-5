@@ -1,8 +1,8 @@
 import { connection } from 'next/server';
 import { z } from 'zod';
-import { catalogSchema } from '@/admin-lib/catalog';
-import { readCatalog, writeCatalog } from '@/admin-lib/store';
-import { jsonError, sameOrigin, readLimited, BodyTooLarge } from '@/admin-lib/server';
+import { catalogSchema } from '@/lib/admin/catalog';
+import { readCatalog, writeCatalog } from '@/lib/admin/store';
+import { jsonError, sameOrigin, readLimited, BodyTooLarge } from '@/lib/admin/server';
 
 export async function GET() { await connection(); try {
     return Response.json(await readCatalog(), { headers: { 'Cache-Control': 'no-store' } });
