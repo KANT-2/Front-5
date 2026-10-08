@@ -216,3 +216,18 @@ GitHub Projects, 라벨, 마일스톤은 위 기준에 맞춰 구성한다.
   관리자 우회 권한 자체는 다른 PR에도 적용되므로, Hotfix 한정 사용은 운영 규칙으로 준수한다.
 - 저장소 병합 방식은 Squash merge와 Merge commit을 허용하고 Rebase merge는 비활성화한다.
 - 병합된 작업 브랜치는 자동 삭제하되, 보호된 `main`, `production`은 유지한다.
+
+## 개발 MCP CI/CD 운영
+
+- 기존 `Frontend CI`를 배포 게이트로 사용한다. CI/CD 스크립트 변경 시
+  `python3 -m unittest discover -s ops -p 'test_*.py' -v`도 검증한다.
+- 개발 MCP 프로젝트 `front-5-cicd`에서 `ops/mcp_cicd.py`로 배포 프로세스를 운영한다.
+- `main`은 비공개 검증 앱 `kant2-front5-staging`(포트 3100), `production`은
+  공개 운영 앱 `kant2-front5-production`(포트 3200)에 연결한다.
+- 해당 브랜치의 최신 SHA에 대한 최신 `Frontend CI` push 실행이 성공한 경우에만 배포한다.
+- 브랜치 변경은 60초마다 확인하며, CI/API 재확인은 최소 180초 간격으로 수행한다.
+- 빌드·후보 서버 확인 실패 시 기존 버전을 유지한다. 새 서버 시작 실패 시 이전 버전을 복구한다.
+- 배포 상태·로그·릴리스는 `.deploy/`에 저장하고 Git에서 제외한다.
+- 스크립트 수정은 기존 이슈·브랜치·PR·리뷰 규칙을 따르며, 병합 후 개발 MCP의
+  운영 스크립트를 갱신하고 앱을 재배포한다. 실행 환경 재생성 시 준비·배포 절차로 복원한다.
+- 상세 실행·검증·복구 방법은 `ops/README.md`를 따른다.
