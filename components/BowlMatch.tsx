@@ -453,7 +453,7 @@ function BowlMatchBody({ingredients}:{ingredients:Ingredient[]}) {
     open(makeBtn.current);
   };
 
-  const similar = PRODUCTS.find(p=>p?.id===matchProduct(ids)&&p.status==='active') ?? PRODUCTS.find(p=>p?.status==='active') ?? PRODUCTS.find(p=>p?.status!=='hidden')!;
+  const similar = PRODUCTS.find(p=>p?.id===matchProduct(selected.length?mainIngredient(selected).id:"")&&p.status==='active') ?? PRODUCTS.find(p=>p?.status==='active') ?? PRODUCTS.find(p=>p?.status!=='hidden')!;
   const resultAllergens = unique([
     ...selected.flatMap((i) => i.allergens),
     ...DRESSINGS[dressing]?.allergens ?? [],

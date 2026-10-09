@@ -35,15 +35,15 @@ export function mainIngredient(list: Ingredient[]): Ingredient {
   return list.reduce((main, i) => (i.price > main.price ? i : main));
 }
 
-/** 고른 재료와 가장 비슷한 메뉴 번호 (완성 사진과 "비슷한 메뉴 보기"에 쓴다) */
-export function matchProduct(ids: string[]): number {
-  if (ids.includes("burrata")) return 9;
-  if (ids.includes("salmon")) return 1;
-  if (ids.includes("shrimp")) return 2;
-  if (ids.includes("tofu")) return 3;
-  if (ids.includes("chicken")) return 0;
-  if (ids.includes("chickpea")) return 10;
-  if (ids.includes("mushroom")) return 8;
+/** 주된 재료와 가장 비슷한 메뉴 번호 (완성 사진과 "비슷한 메뉴 보기"에 쓴다) */
+export function matchProduct(mainIngredientId: string): number {
+  if (mainIngredientId === "burrata") return 9;
+  if (mainIngredientId === "salmon") return 1;
+  if (mainIngredientId === "shrimp") return 2;
+  if (mainIngredientId === "tofu") return 3;
+  if (mainIngredientId === "chicken") return 0;
+  if (mainIngredientId === "chickpea") return 10;
+  if (mainIngredientId === "mushroom") return 8;
   return 4;
 }
 
