@@ -26,7 +26,12 @@ export interface Product {
   allergens: string[];
   /** 주요 재료, " · " 로 구분 */
   ingredients: string;
+  /** 판매 중 여부. 관리자가 판매 중지하면 false (없으면 판매 중) */
+  isOnSale?: boolean;
 }
+
+/** 관리자가 수정할 수 있는 항목. 보낸 항목만 바뀐다 */
+export type ProductUpdate = Partial<Pick<Product, "name" | "description" | "price" | "tag" | "isNew" | "isOnSale">>;
 
 export interface Dressing {
   name: string;

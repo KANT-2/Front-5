@@ -173,3 +173,18 @@ footer > div { display: flex; justify-content: space-between; gap: 25px; color: 
   html { scroll-behavior: auto; }
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+
+/* ===== 품절 (공용 카탈로그 판매 상태) ===== */
+.soldout-cover { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: #d9ddd3b3; pointer-events: none; }
+.soldout-cover strong { background: var(--color-brand); color: var(--color-cream); font-size: 18px; font-weight: 700; padding: 9px 26px; border-radius: 30px; letter-spacing: 1px; }
+.soldout-cover span { background: var(--color-cream); color: var(--color-ink); font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 20px; }
+.product.is-soldout .food-image, .pv-photo:has(.soldout-cover) .food-image { filter: grayscale(.55); opacity: .75; }
+.soldout-chip { position: absolute; right: 12px; bottom: 12px; z-index: 2; background: var(--color-cream); border: 1px solid #b8c9ae; border-radius: 20px; padding: 5px 10px; font-size: 11px; font-weight: 600; color: #637561; }
+.card-soldout { display: block; margin-top: 6px; font-size: 12px; font-weight: 700; color: #6b5a2e; }
+.product.is-soldout > h3, .product.is-soldout > strong { color: #5f6f5c; }
+.opt-soldout { display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 12px; background: var(--color-brand); color: var(--color-cream); font-size: 11px; font-weight: 600; line-height: 1.5; vertical-align: middle; }
+label.is-soldout { cursor: not-allowed; color: #8a957f; background: #eeefe8; }
+label.is-soldout input { cursor: not-allowed; }
+.pv-soldout { margin: 14px 0 0; padding: 12px 14px; border-radius: 8px; background: #fbf3e2; color: #6b5a2e; font-size: 13px; }
+.pv-soldout strong { margin-right: 6px; padding: 2px 9px; border-radius: 12px; background: var(--color-brand); color: var(--color-cream); font-size: 12px; }
+.pv-buy .primary:disabled { background: #d6dccd; color: #637561; opacity: 1; }
