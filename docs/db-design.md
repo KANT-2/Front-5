@@ -2,110 +2,178 @@
 
 PostgreSQL · 정민님 원격 리눅스 서버에서 실행 · 작성: 안형준 (백엔드)
 
-## 범위
+## 목표
 
-| 단계 | 테이블 | 쓰는 곳 |
-| --- | --- | --- |
-| **1단계 (이번)** | products, allergens, product_allergens | 고객 메뉴·상세, 관리자 상품 수정, 상품 API |
-| 2단계 (확장) | orders, order_items, order_item_drinks, reviews, admin_users | 주문 저장, 리뷰 저장, 관리자 로그인 |
+관리자 기능(#16)은 지금 카탈로그 전체를 `.data/admin/catalog.json` 한 파일에 저장한다.
+이 설계는 같은 데이터를 PostgreSQL 테이블로 옮긴다. **화면과 API(`/api/admin/catalog`)는 그대로 두고**,
+`lib/admin/store.ts` 의 `readCatalog` · `writeCatalog` 안쪽만 DB 조회·저장으로 바꾸는 것이 목표다.
 
-과제 제외 범위(로그인·주문 서버 저장)와 겹치는 2단계는 필수 범위를 마친 뒤 진행한다.
+기준: `lib/admin/catalog.ts` 의 `catalogSchema` (main, #23 반영). PR #24 리뷰에 따라 알레르기는 연관 테이블, 리뷰 via·재료(bowl match)는 제외.
 
-## ERD (1단계)
+## ERD
 
 ```mermaid
 erDiagram
-  products ||--o{ product_allergens : "포함"
+  categories ||--o{ products : "샐러드 분류"
+  products ||--o{ product_allergens : ""
   allergens ||--o{ product_allergens : ""
+  products ||--o{ product_option_groups : ""
+  option_groups ||--o{ product_option_groups : ""
+  option_groups ||--o{ option_choices : "custom 선택지"
+  products |o--o{ reviews : "리뷰 대상"
+  reviews ||--o{ review_images : ""
+  reviews ||--o{ review_drinks : ""
+  products |o--o{ season_pages : "연결 메뉴"
+  products |o--o| site_content : "시즌 스페셜"
 
   products {
-    int id PK "0부터, 메뉴는 화면 주소와 같음"
-    varchar name UK
-    varchar name_en
+    varchar id PK "salad-0, drink-1, dressing-2"
+    int customer_id UK "샐러드만, 고객 주소 번호 /product/0"
+    varchar type "salad·drink·dressing"
+    varchar name
+    varchar name_en "optional"
+    int price "0 이상"
     varchar description
-    int price "메뉴 가격·음료 추가 금액·드레싱 0"
-    enum category "protein·vegan·new·other·dressing·drink"
-    enum tag "BEST·PLANT·PICK·NEW, 없을 수 있음"
-    bool is_new
-    varchar image_url
-    varchar ingredients "재료·성분"
-    int kcal
-    int protein_g
-    int weight_g "음료는 ml"
-    int sort_order "같은 분류 안에서 보여줄 순서"
-    bool is_on_sale "관리자 판매 중지"
-    timestamptz created_at
-    timestamptz updated_at
+    varchar ingredients "optional"
+    varchar category
+    varchar status "active·soldout·hidden"
+    varchar badge "''·BEST·NEW·PLANT·PICK"
+    varchar image
+    bool deleted
+    int sort_order
   }
   allergens {
     int id PK
     varchar name UK
   }
   product_allergens {
-    int product_id PK,FK
+    varchar product_id PK,FK
     int allergen_id PK,FK
+    smallint position "문구 안 순서"
+  }
+  categories {
+    varchar name PK
+    int sort_order
+  }
+  option_groups {
+    varchar id PK "dressing, drinks"
+    varchar name
+    bool required
+    bool multiple
+    varchar source "custom·drinks·dressings"
+    bool deleted
+    int sort_order
+  }
+  option_choices {
+    varchar group_id PK,FK
+    varchar id PK
+    varchar name
+    int price
+    int sort_order
+  }
+  product_option_groups {
+    varchar product_id PK,FK
+    varchar group_id PK,FK
+    int sort_order
+  }
+  reviews {
+    varchar id PK
+    varchar product_id FK "optional"
+    bool is_sample
+    varchar title
+    varchar body
+    smallint rating "1~5"
+    varchar menu
+    varchar author
+    varchar date_label
+    timestamptz created_at
+    bool deleted
+    int sort_order
+  }
+  review_images {
+    varchar review_id PK,FK
+    smallint position PK
+    varchar image
+  }
+  review_drinks {
+    varchar review_id PK,FK
+    smallint position PK
+    varchar name
+  }
+  site_content {
+    smallint id PK "항상 1"
+    varchar hero_title
+    varchar hero_description
+    varchar season_title
+    varchar season_description
+    varchar season_image
+    varchar season_product_id FK
+    bool season_visible
+  }
+  season_pages {
+    varchar id PK
+    varchar title
+    varchar description
+    varchar image
+    varchar product_id FK
+    bool visible
+    int sort_order
   }
 ```
 
-| category | 데이터 | id | price 뜻 |
-| --- | --- | --- | --- |
-| `protein` · `vegan` · `new` · `other` | 메뉴: 샐러드 10 · 세트 2 | 0~11 | 판매 가격 |
-| `dressing` | 레몬 올리브 · 발사믹 · 참깨 · 시저 · 드레싱 없이 | 12~16 | 항상 0 (무료) |
-| `drink` | 아이스 아메리카노 · 오렌지 · 사과 · 케일 그린 주스 | 17~20 | 추가 금액 |
+ERD 외에 1행짜리 테이블 2개가 더 있다: `catalog_meta` (저장 버전 revision), `store_location` (매장 위치).
+재료(bowl match, `ingredients`)는 후속 작업으로 이번 스키마에서 제외했다. 관리자 데이터의 `ingredients[]` 는 DB 전환 후에도 당분간 저장하지 않는다 (후속 결정).
+
+## 관리자 데이터 ↔ 테이블
+
+| catalog.json | 테이블 |
+| --- | --- |
+| `revision`, `updatedAt` | catalog_meta |
+| `location` | store_location |
+| `categories[]` | categories (배열 순서 → sort_order) |
+| `products[]` | products |
+| `products[].optionIds[]` | product_option_groups |
+| `groups[]` | option_groups |
+| `groups[].choices[]` | option_choices |
+| `products[].allergens` ("닭고기, 토마토") | allergens + product_allergens (쉼표로 나눠 저장, 읽을 때 position 순서로 다시 합침) |
+| `ingredients[]` | (후속) |
+| `reviews[]` | reviews |
+| `reviews[].images[]`, `reviews[].drinks[]` | review_images, review_drinks |
+| `content` (seasonPages 제외) | site_content |
+| `content.seasonPages[]` | season_pages |
+
+이름 규칙: 코드의 camelCase 는 컬럼에서 snake_case (`detailAddress` → `detail_address`, `en` → `name_en`, `sample` → `is_sample`, `date` → `date_label`).
+리뷰의 `via`(픽업·배달)는 저장하지 않는다. 수령 방식이 배달로 고정되었다.
 
 ## 설계 결정
 
 | 결정 | 이유 |
 | --- | --- |
-| 메뉴·드레싱·음료를 products 한 테이블로, category 로 구분 | 관리자가 메뉴 가격, 음료 추가 금액, 판매 중지를 한 화면·한 API로 관리한다. 알레르기 연결도 테이블 하나로 끝난다 |
-| 모든 컬럼 NOT NULL (뱃지 tag 만 예외) | 드레싱·음료도 영문명·설명·재료·칼로리·단백질·중량을 실제로 가진다. 빈 값이 없어 조회·화면 코드가 단순하다 |
-| 드레싱·음료에 뱃지·신메뉴 금지 (`chk_option_no_badge`) | BEST·NEW 같은 표시는 메뉴에만 의미가 있다 |
-| 드레싱 가격 0 고정 (`chk_dressing_free`) | 모든 드레싱이 무료. 유료 드레싱이 생기면 이 규칙만 지운다 |
-| 알레르기를 별도 테이블 + 연결 테이블로 분리 (N:M) | "우유가 들어간 메뉴" 같은 조회가 쉽고, 같은 재료가 오타로 두 번 생기지 않는다(UNIQUE) |
-| category, tag 를 ENUM 으로 | 정해진 값 외에는 DB가 거부한다 |
-| 가격·칼로리·단백질·중량에 CHECK (0 이상) | 관리자 화면에서 잘못된 값이 들어와도 DB에서 한 번 더 막는다 |
-| products.id 를 0부터 | 현재 화면 주소(/product/0)와 컴포넌트가 배열 위치를 id로 쓰고 있어 메뉴를 0~11로 맞춘다. seed 후 시퀀스를 최댓값으로 맞춰 새 상품은 21번부터 |
-| 상품 삭제 대신 is_on_sale | 지난 주문이 상품을 참조하므로(2단계) 지우지 않고 판매 중지로 숨긴다 |
+| 관리자 카탈로그 구조를 그대로 따른다 | 화면·API 코드를 바꾸지 않고 저장소만 교체한다. 읽고 다시 쓰면 같은 JSON 이 나와야 한다 |
+| 샐러드·음료·드레싱을 products 한 테이블, `type` 으로 구분 | 관리자 화면이 이미 한 목록으로 관리한다. 음료에도 BEST·NEW 뱃지가 있다 |
+| 배열은 별도 테이블 + `sort_order`·`position` | 관리자가 정한 순서가 곧 화면 순서다 |
+| id 는 문자열 그대로 (`salad-0`) | 관리자 화면이 id 를 만들고 옵션·시즌·리뷰가 그 id 로 서로를 가리킨다. 고객 주소용 숫자는 `customer_id` 로 따로 둔다 |
+| 빈 문자열은 `''` 로 저장, optional 항목만 NULL | 관리자 데이터에서 `''`(비어 있음)와 "항목 없음"이 구분된다. 단 연결 id(`seasonProductId`, `productId`)의 `''` 는 외래키를 위해 NULL 로 바꿔 저장하고 읽을 때 `''` 로 되돌린다 |
+| enum 대신 `VARCHAR + CHECK` | 값 목록이 zod 스키마와 같이 자주 바뀐다. CHECK 는 한 줄 수정으로 바뀌지만 ENUM 은 값 삭제가 어렵다 |
+| 삭제는 `deleted` 플래그 | 관리자 화면이 삭제 후 복구를 지원한다. 리뷰·시즌이 가리키는 상품도 남아 있어야 한다 |
+| 1행 테이블 (`id = 1` CHECK) | 매장 위치·메인 문구·저장 버전은 하나뿐이다 |
+| 알레르기는 allergens + product_allergens 연관 테이블 (N:M) | 팀에서 연관 관계로 관리하기로 했다. "우유가 들어간 메뉴" 조회가 쉽고 같은 재료가 오타로 두 번 생기지 않는다(UNIQUE). 관리자 화면의 문구 입력은 그대로 두고 저장할 때 쉼표로 나눈다 |
+| 정수 범위 체크 없음 (가격 0 이상·별점 1~5 만 유지) | 상한값(가격 100만 원, 사진 10장 등)은 zod 스키마가 이미 검사한다. DB 에는 값의 의미상 꼭 필요한 규칙만 둔다 |
 
-### 한 테이블로 합쳐서 지킬 규칙
+## 저장 방식 (store.ts 교체 계획)
 
-- 조회는 `lib/products-repository.ts` 한 곳에서만 하고, 메뉴·드레싱·음료를 **category 조건으로 나눠 읽는 함수**(findMenus, findDressings, findDrinks)만 쓴다. 조건을 빠뜨리면 메뉴 목록에 드레싱이 섞인다.
-- 메뉴만 볼 때: `WHERE category NOT IN ('dressing', 'drink')`
-- 관리자 수정 API는 드레싱·음료의 tag·isNew 수정 요청을 DB에 보내기 전에 400 으로 막는다.
-- 2단계 주문에서 "드레싱 칸에 음료 id" 같은 잘못된 참조는 외래키가 막지 못하므로 주문 저장 API에서 category 를 확인한다.
+`lib/admin/store.ts` (#23 기준)의 공개 함수 3개를 DB 로 바꾼다. 호출하는 API·화면은 그대로 둔다.
 
-## 화면 데이터 ↔ DB
+| 함수 | 지금 (파일) | DB |
+| --- | --- | --- |
+| `readCatalog()` | catalog.json 읽기. 없으면 `customerSeed()` 로 생성, schemaVersion 이 3 이 아니면 `migrateCatalog` 후 저장 | 테이블을 읽어 Catalog 객체로 조립. 비어 있으면 `customerSeed()` 를 넣고 revision 1 |
+| `writeCatalog(catalog, revision)` | 파일 잠금 → revision 비교 → 샐러드에 `customerId` 부여(기존 값 유지, 새 메뉴는 최댓값+1, 최소 12) → `migrateCatalog` → 저장 | **트랜잭션** 안에서 `catalog_meta` 를 `FOR UPDATE` 로 잠그고 revision 비교 → 다르면 null(409) → 같은 규칙으로 `customer_id` 부여 → 테이블 내용 교체 + revision + 1 |
+| `appendCustomerReview(input)` | 고객이 쓴 리뷰 1개 추가. `customerId` 로 판매 중인 샐러드를 찾고, 같은 id 리뷰가 있으면 그대로 반환, 500개 한도 | 트랜잭션 안에서 `products` 조회(`customer_id`, `type = 'salad'`, `deleted = false`, `status <> 'hidden'`) → `reviews` 에 INSERT → revision + 1 |
 
-| 화면 코드 | DB |
-| --- | --- |
-| `PRODUCTS` (data/products.ts) | `category NOT IN ('dressing','drink') ORDER BY sort_order` |
-| `DRESSINGS` | `category = 'dressing' ORDER BY sort_order` |
-| `DRINKS` | `category = 'drink' ORDER BY sort_order` |
-| `en`, `imageUrl`, `isNew` | `name_en`, `image_url`, `is_new` (snake_case) |
-| `allergens: string[]` | `product_allergens` → `allergens.name` |
-| `NUTRITION[id]`, `DRESSING_KCAL`, `DRINK_KCAL` (lib/products.ts) | `kcal`, `protein_g`, `weight_g` |
-
-화면은 드레싱·음료를 배열 위치(0부터)로 고르므로, DB id(12~20)가 아니라 `sort_order` 순서로 읽어 배열로 만든다.
-코드의 `Category` 타입(types/product.ts)은 메뉴 분류 4개만 가지며, `dressing`·`drink` 는 DB에서만 쓴다.
-드레싱·음료의 영문명·설명·재료·단백질·중량은 seed 의 예시 값이다.
-
-## 2단계 초안 (확장)
-
-```mermaid
-erDiagram
-  orders ||--|{ order_items : "포함"
-  order_items }o--|| products : "메뉴"
-  order_items }o--|| products : "드레싱"
-  order_items ||--o{ order_item_drinks : ""
-  order_item_drinks }o--|| products : "음료"
-  products ||--o{ reviews : ""
-```
-
-- orders: 수령 방식(pickup·delivery), 매장 또는 배달 주소, 수령 시간대, 합계, 상태
-- order_items: 메뉴, 드레싱, 수량, **주문 당시 가격**(상품 가격이 바뀌어도 주문 금액 유지)
-- order_item_drinks: 주문 항목에 추가한 음료와 주문 당시 추가 금액
-- reviews: 메뉴, 별점(1~5 CHECK), 내용, 작성일
-- admin_users: 관리자 아이디, 비밀번호 해시
+- 관리자 화면은 저장할 때마다 카탈로그 전체를 보내므로(PUT), `writeCatalog` 는 처음에는 "전체 교체" 방식으로 단순하게 구현한다.
+- 트랜잭션이라 중간에 실패하면 이전 상태가 그대로 남는다.
+- `customer_id` 는 샐러드만 가진다 (음료·드레싱은 NULL). 기존 0~11번은 고객 주소(/product/0)와 같다.
+- 파일 방식의 `schemaVersion`·`migrateCatalog` 는 예전 JSON 을 옮길 때만 필요하다. DB 는 스키마가 곧 버전이므로 마이그레이션 SQL 로 관리한다.
 
 ## 실행 방법
 
@@ -115,9 +183,11 @@ psql "$DATABASE_URL" -f db/seed.sql
 ```
 
 DBeaver 에서는 SQL 편집기에 파일 내용을 붙여넣고 **스크립트 실행(Alt+X)** 으로 schema.sql → seed.sql 순서로 실행한다.
+초기 데이터는 `customerSeed()`(파일 저장소가 처음 만들어질 때와 같은 데이터) 결과를 옮긴 것이다:
+상품 21 (샐러드 12 · 음료 4 · 드레싱 5) · 알레르기 12종 · 상품-알레르기 연결 28 · 분류 4 · 옵션 그룹 2 · 리뷰 48.
 
-## 정민님께 확인할 것
+## 확인할 것
 
-- [ ] 테이블 구조 검토 (메뉴·드레싱·음료를 category 로 통합, 전 컬럼 NOT NULL, id 0부터, 알레르기 N:M)
-- [ ] DB 이름·계정 생성, DATABASE_URL 전달
-- [ ] 스키마 변경 방식: SQL 파일로 관리할지, Prisma 마이그레이션을 쓸지
+- [ ] 정민님: 테이블 구조 검토, DB 이름·계정 생성, DATABASE_URL 전달
+- [ ] 서현님: store.ts 의 readCatalog·writeCatalog·appendCustomerReview 를 DB 로 바꾸는 것 동의, catalog.ts 변경 계획 공유
+- [ ] DB 접근 방식: `pg` 로 SQL 직접 작성 / Prisma 중 선택
