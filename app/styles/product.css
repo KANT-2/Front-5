@@ -48,7 +48,7 @@
 }
 @media (max-width: 700px) {
   .pv { grid-template-columns: 1fr; gap: 22px; padding-top: 22px; }
-  .pv-photo { position: static; }
+  .pv-photo { position: relative; top: auto; }
   .pv-info h1 { font-size: 28px; }
   .pv-price { font-size: 24px; }
   .pv-buy { box-shadow: 0 -10px 14px -10px #00000018; }

@@ -22,19 +22,21 @@ export default function ProductDetail({ product: p }: { product: Product }) {
     ...g,
     choices:
       g.source === "custom"
-        ? g.choices
-        : catalog.products
+        ? g.choices.map((c) => ({ ...c, soldout: false }))
+        : // 품절 항목도 '품절' 표시와 함께 보여주되 고를 수는 없게 한다 (숨김·삭제는 제외).
+          catalog.products
             .filter(
               (c) =>
                 c.type === (g.source === "drinks" ? "drink" : "dressing") &&
                 !c.deleted &&
-                c.status === "active",
+                c.status !== "hidden",
             )
             .map((c) => ({
               id: c.id,
               name: c.name,
               price: c.price,
               image: c.image,
+              soldout: c.status !== "active",
             })),
   }));
   const chosen = groups.flatMap((g) =>
@@ -91,10 +93,14 @@ export default function ProductDetail({ product: p }: { product: Product }) {
             </legend>
             {g.choices.length ? (
               g.choices.map((c) => (
-                <label key={c.id}>
+                <label
+                  key={c.id}
+                  className={c.soldout ? "is-soldout" : undefined}
+                >
                   <input
                     type={g.multiple ? "checkbox" : "radio"}
                     name={g.id}
+                    disabled={c.soldout}
                     checked={(selected[g.id] ?? []).includes(c.id)}
                     onChange={(e) =>
                       setSelected((current) => ({
@@ -110,6 +116,7 @@ export default function ProductDetail({ product: p }: { product: Product }) {
                     }
                   />
                   {c.name}
+                  {c.soldout && <span className="opt-soldout">품절</span>}
                   {c.price > 0 && <span> +{money(c.price)}</span>}
                   {"image" in c && typeof c.image === "string" && c.image && (
                     <span className="opt-preview" aria-hidden="true">
@@ -158,6 +165,11 @@ export default function ProductDetail({ product: p }: { product: Product }) {
             ]),
           ].join(", ") || "표기 대상 없음"}
         </div>
+        {p.status === "soldout" && (
+          <p className="pv-soldout" role="status">
+            <strong>품절</strong> 지금은 주문할 수 없어요. 잠시 준비 중이에요.
+          </p>
+        )}
         <div className="dialog-bottom pv-buy">
           <div className="qty">
             <button
@@ -184,7 +196,7 @@ export default function ProductDetail({ product: p }: { product: Product }) {
             disabled={p.status !== "active" || !complete}
           >
             {p.status === "soldout"
-              ? "품절"
+              ? "품절 · 주문할 수 없어요"
               : money((p.price + optionPrice) * qty) + " · 담기"}
           </button>
         </div>

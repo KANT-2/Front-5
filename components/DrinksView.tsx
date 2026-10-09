@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useCart } from "./CartProvider";
 import { useCustomerCatalog } from "./CustomerCatalogProvider";
 import PageHeading from "./PageHeading";
+import SoldOutCover from "./SoldOutCover";
 import { money } from "@/lib/products";
 
 /** 음료만 따로 고르는 페이지. + 를 누르면 장바구니에 음료 한 줄로 담기고 장바구니가 열린다. */
@@ -23,29 +24,49 @@ export default function DrinksView() {
       </div>
       <div className="product-grid">
         {list.map((d) => (
-          <div key={d.id} className={`product drink-card${d.available ? "" : " is-soldout"}`}>
+          <div
+            key={d.id}
+            className={`product drink-card${d.available ? "" : " is-soldout"}`}
+          >
             <div className="product-photo">
               {d.image && (
-                <Image className="food-image" src={d.image} alt={d.name} width={1024} height={1024} sizes="(max-width: 600px) 50vw, 300px" loading="eager" />
+                <Image
+                  className="food-image"
+                  src={d.image}
+                  alt={d.name}
+                  width={1024}
+                  height={1024}
+                  sizes="(max-width: 600px) 50vw, 300px"
+                  loading="eager"
+                />
               )}
-              {!d.available && <span className="product-tag">품절</span>}
-              <button
-                type="button"
-                className="quick-add"
-                aria-label={`${d.name} ${money(d.price)} 장바구니에 담기`}
-                title="장바구니에 담기"
-                disabled={!d.available}
-                onClick={(e) => {
-                  addDrink(d.n);
-                  open(e.currentTarget);
-                }}
-              >
-                +
-              </button>
+              {!d.available && <SoldOutCover />}
+              {!d.available ? (
+                <span className="soldout-chip">품절</span>
+              ) : (
+                <button
+                  type="button"
+                  className="quick-add"
+                  aria-label={`${d.name} ${money(d.price)} 장바구니에 담기`}
+                  title="장바구니에 담기"
+                  disabled={!d.available}
+                  onClick={(e) => {
+                    addDrink(d.n);
+                    open(e.currentTarget);
+                  }}
+                >
+                  +
+                </button>
+              )}
             </div>
             <h3>{d.name}</h3>
-            {DRINK_KCAL[d.n] > 0 && <span className="card-nutri">약 {DRINK_KCAL[d.n]}kcal</span>}
+            {DRINK_KCAL[d.n] > 0 && (
+              <span className="card-nutri">약 {DRINK_KCAL[d.n]}kcal</span>
+            )}
             <strong>{money(d.price)}</strong>
+            {!d.available && (
+              <span className="card-soldout">현재 주문할 수 없어요</span>
+            )}
           </div>
         ))}
       </div>
