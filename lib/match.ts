@@ -1,5 +1,5 @@
 import type { Ingredient, Stage } from "./data/ingredients";
-import { createLocalStore } from "./local-store";
+import { createLocalStore, type LocalStore } from "./local-store";
 import { DRESSINGS } from "./products";
 
 /** 재료를 하나도 더하지 않은 기본 볼 가격 */
@@ -47,9 +47,8 @@ export function matchProduct(mainIngredientId: string): number {
   return 4;
 }
 
-/* ---- 브라우저 저장 (정적 페이지 시절과 같은 키·모양을 그대로 쓴다) ---- */
+/* ---- 브라우저 저장 ("내 조합 저장하기" 결과만 예전과 같은 localStorage 키를 그대로 쓴다) ---- */
 
-const DECISION_KEY = "bm-decisions";
 const RECIPE_KEY = "bm-recipe";
 
 function read(key: string): unknown {
@@ -66,18 +65,6 @@ function write(key: string, value: unknown) {
   } catch {
     // 저장할 수 없으면 이번 화면에서만 유지한다.
   }
-}
-
-function loadDecisions(): Decision[] {
-  const raw = read(DECISION_KEY);
-  if (!Array.isArray(raw)) return [];
-  const out: Decision[] = [];
-  // 앞에서부터 순서가 맞는 기록까지만 쓴다.
-  for (const [n, d] of raw.entries()) {
-    if (typeof d !== "object" || d === null || d.index !== n || typeof d.liked !== "boolean") break;
-    out.push({ index: n, liked: d.liked, ingredientId: typeof d.ingredientId === "string" ? d.ingredientId : undefined });
-  }
-  return out;
 }
 
 function loadRecipe(): SavedRecipe | null {
@@ -97,5 +84,25 @@ function loadRecipe(): SavedRecipe | null {
 
 const NO_DECISIONS: Decision[] = [];
 
-export const decisionsStore = createLocalStore<Decision[]>(DECISION_KEY, loadDecisions, (v) => write(DECISION_KEY, v), NO_DECISIONS);
+/** 저장(localStorage) 없이 메모리에서만 유지하는 외부 저장소. 새로고침하면 비워진다. */
+function createMemoryStore<T>(empty: T): LocalStore<T> {
+  let value = empty;
+  const listeners = new Set<() => void>();
+  return {
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    getSnapshot: () => value,
+    getServerSnapshot: () => empty,
+    set(next) {
+      value = next;
+      listeners.forEach((l) => l());
+    },
+  };
+}
+
+// 재료 고르기 진행 상황은 이번 방문에서만 유지한다 ("내 조합 저장하기"로 남긴 조합과는 다르게,
+// 다른 페이지로 갔다 오거나 새로고침하면 새로 시작한다).
+export const decisionsStore = createMemoryStore<Decision[]>(NO_DECISIONS);
 export const recipeStore = createLocalStore<SavedRecipe | null>(RECIPE_KEY, loadRecipe, (v) => write(RECIPE_KEY, v), null);
