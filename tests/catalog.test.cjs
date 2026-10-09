@@ -201,3 +201,73 @@ test("custom options, new-item cart persistence and public visibility are consis
     delete global.localStorage;
   }
 });
+
+test("permanently removed product IDs are not reused after a review write", async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "front5-purge-"));
+  const previous = process.env.ADMIN_DATA_DIR;
+  process.env.ADMIN_DATA_DIR = directory;
+  try {
+    const { readCatalog, writeCatalog, appendCustomerReview } = require("../lib/admin/store.ts");
+    let state = await readCatalog();
+    const prototype = state.catalog.products.find(p=>p.type==="salad");
+    state = await writeCatalog({...state.catalog,products:[...state.catalog.products,{...prototype,id:"new-first"}]},state.revision);
+    const firstId = state.catalog.products.find(p=>p.id==="new-first").customerId;
+    state = await writeCatalog({...state.catalog,products:state.catalog.products.filter(p=>p.id!=="new-first")},state.revision);
+    state = await appendCustomerReview({id:"purge-regression",pid:0,author:"고객",stars:5,title:"저장 확인",text:"영구 삭제 이후 상품 번호가 유지되는지 확인합니다.",via:"delivery"});
+    state = await readCatalog();
+    state = await writeCatalog({...state.catalog,products:[...state.catalog.products,{...prototype,id:"new-second"}]},state.revision);
+    assert.ok(state.catalog.products.find(p=>p.id==="new-second").customerId > firstId);
+  } finally {
+    if(previous===undefined)delete process.env.ADMIN_DATA_DIR;else process.env.ADMIN_DATA_DIR=previous;
+    fs.rmSync(directory,{recursive:true,force:true});
+  }
+});
+
+test('allergen suggestions use registered ingredients and flag unknown names',()=>{
+ const {ingredientAllergens}=require('../lib/admin/allergens.ts');
+ const ingredients=[{name:'탱글한 새우',allergens:'새우',deleted:false},{name:'방울토마토',allergens:'토마토, 새우',deleted:false},{name:'우유',allergens:'우유',deleted:true}];
+ assert.deepEqual(ingredientAllergens('새우 · 방울토마토, 새우\n미등록 재료',ingredients),{allergens:'새우, 토마토',unknown:['미등록 재료']});
+ assert.deepEqual(ingredientAllergens('우유',ingredients),{allergens:'',unknown:['우유']});
+ assert.deepEqual(ingredientAllergens('',ingredients),{allergens:'',unknown:[]});
+});
+
+test('origin details survive catalog validation and persistent storage',async()=>{
+ const directory=fs.mkdtempSync(path.join(os.tmpdir(),'front5-origins-'));
+ const previous=process.env.ADMIN_DATA_DIR;process.env.ADMIN_DATA_DIR=directory;
+ try{
+  const {catalogSchema}=require('../lib/admin/catalog.ts');
+  const {readCatalog,writeCatalog}=require('../lib/admin/store.ts');
+  let state=await readCatalog();
+  const ingredients=state.catalog.ingredients.map((i,index)=>index===0?{...i,origin:'국내산',originDetail:'충청남도',allergens:'대두, 우유'}:i);
+  const validated=catalogSchema.parse({...state.catalog,ingredients});
+  await writeCatalog(validated,state.revision);state=await readCatalog();
+  assert.equal(state.catalog.ingredients[0].origin,'국내산');
+  assert.equal(state.catalog.ingredients[0].originDetail,'충청남도');
+  assert.equal(state.catalog.ingredients[0].allergens,'대두, 우유');
+ }finally{if(previous===undefined)delete process.env.ADMIN_DATA_DIR;else process.env.ADMIN_DATA_DIR=previous;fs.rmSync(directory,{recursive:true,force:true});}
+});
+
+test('permanently deleted reviews stay removed after reload and later saves', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'front5-review-purge-'));
+  const previous = process.env.ADMIN_DATA_DIR;
+  process.env.ADMIN_DATA_DIR = directory;
+  try {
+    const { readCatalog, writeCatalog } = require('../lib/admin/store.ts');
+    let state = await readCatalog();
+    const target = state.catalog.reviews[0];
+    const otherIds = state.catalog.reviews.slice(1).map(r => r.id);
+    state = await writeCatalog({ ...state.catalog, reviews: state.catalog.reviews.map(r => r.id === target.id ? { ...r, deleted: true } : r) }, state.revision);
+    state = await writeCatalog({ ...state.catalog, reviews: state.catalog.reviews.filter(r => r.id !== target.id) }, state.revision);
+    state = await readCatalog();
+    assert.ok(!state.catalog.reviews.some(r => r.id === target.id));
+    assert.deepEqual(state.catalog.reviews.map(r => r.id), otherIds);
+    state = await writeCatalog(state.catalog, state.revision);
+    assert.ok(!(await readCatalog()).catalog.reviews.some(r => r.id === target.id));
+    state = await writeCatalog({ ...state.catalog, reviews: [] }, state.revision);
+    assert.deepEqual((await readCatalog()).catalog.reviews, []);
+  } finally {
+    if (previous === undefined) delete process.env.ADMIN_DATA_DIR;
+    else process.env.ADMIN_DATA_DIR = previous;
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});

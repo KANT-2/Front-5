@@ -27,9 +27,9 @@ async function withLock<T>(fn: () => Promise<T>): Promise<T> {
     await rm(lock, { recursive: true, force: true });
   }
 }
-async function readState(): Promise<Snapshot> {
+async function readState(): Promise<Snapshot & { nextCustomerId?: number }> {
   try {
-    const snapshot: Snapshot & { schemaVersion?: number } = JSON.parse(
+    const snapshot: Snapshot & { schemaVersion?: number; nextCustomerId?: number } = JSON.parse(
       await readFile(path.join(dataDirectory(), "catalog.json"), "utf8"),
     );
     if (snapshot.schemaVersion !== 3) {
@@ -76,8 +76,7 @@ export async function writeCatalog(
     const current = await readState();
     if (current.revision !== revision) return null;
     let nextId =
-      Math.max(11, ...current.catalog.products.map((p) => p.customerId ?? -1)) +
-      1;
+      Math.max(current.nextCustomerId ?? 12, Math.max(11, ...current.catalog.products.map((p) => p.customerId ?? -1)) + 1);
     const normalized = {
       ...catalog,
       products: catalog.products.map((p) => ({
@@ -91,6 +90,7 @@ export async function writeCatalog(
     };
     const snapshot = {
       catalog: migrateCatalog(normalized),
+      nextCustomerId: nextId,
       revision: revision + 1,
       updatedAt: new Date().toISOString(),
     };
@@ -135,6 +135,7 @@ export async function appendCustomerReview(input: {
       deleted: false,
     };
     const next = {
+      nextCustomerId: current.nextCustomerId,
       catalog: {
         ...current.catalog,
         reviews: [review, ...(current.catalog.reviews ?? [])],
