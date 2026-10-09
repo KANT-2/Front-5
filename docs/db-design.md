@@ -8,13 +8,15 @@ PostgreSQL · 정민님 원격 리눅스 서버에서 실행 · 작성: 안형�
 이 설계는 같은 데이터를 PostgreSQL 테이블로 옮긴다. **화면과 API(`/api/admin/catalog`)는 그대로 두고**,
 `lib/admin/store.ts` 의 `readCatalog` · `writeCatalog` 안쪽만 DB 조회·저장으로 바꾸는 것이 목표다.
 
-기준: `lib/admin/catalog.ts` 의 `catalogSchema` (main, #23 반영: customerId · 재료 stage · 리뷰 productId·via 포함).
+기준: `lib/admin/catalog.ts` 의 `catalogSchema` (main, #23 반영). PR #24 리뷰에 따라 알레르기는 연관 테이블, 리뷰 via·재료(bowl match)는 제외.
 
 ## ERD
 
 ```mermaid
 erDiagram
   categories ||--o{ products : "샐러드 분류"
+  products ||--o{ product_allergens : ""
+  allergens ||--o{ product_allergens : ""
   products ||--o{ product_option_groups : ""
   option_groups ||--o{ product_option_groups : ""
   option_groups ||--o{ option_choices : "custom 선택지"
@@ -26,20 +28,28 @@ erDiagram
 
   products {
     varchar id PK "salad-0, drink-1, dressing-2"
-    int customer_id UK "고객 주소 번호 /product/0"
+    int customer_id UK "샐러드만, 고객 주소 번호 /product/0"
     varchar type "salad·drink·dressing"
     varchar name
     varchar name_en "optional"
-    int price "0~1,000,000"
+    int price "0 이상"
     varchar description
     varchar ingredients "optional"
     varchar category
     varchar status "active·soldout·hidden"
     varchar badge "''·BEST·NEW·PLANT·PICK"
     varchar image
-    varchar allergens "입력 문구 그대로"
     bool deleted
     int sort_order
+  }
+  allergens {
+    int id PK
+    varchar name UK
+  }
+  product_allergens {
+    varchar product_id PK,FK
+    int allergen_id PK,FK
+    smallint position "문구 안 순서"
   }
   categories {
     varchar name PK
@@ -66,25 +76,9 @@ erDiagram
     varchar group_id PK,FK
     int sort_order
   }
-  ingredients {
-    varchar id PK
-    varchar name
-    varchar name_en "optional"
-    int price "optional"
-    varchar stage "GREENS·PROTEIN·VEGGIES·TOPPINGS"
-    varchar color "optional"
-    varchar description
-    varchar image
-    varchar category
-    varchar allergens
-    varchar status
-    bool deleted
-    int sort_order
-  }
   reviews {
     varchar id PK
     varchar product_id FK "optional"
-    varchar via "pickup·delivery"
     bool is_sample
     varchar title
     varchar body
@@ -128,7 +122,7 @@ erDiagram
 ```
 
 ERD 외에 1행짜리 테이블 2개가 더 있다: `catalog_meta` (저장 버전 revision), `store_location` (매장 위치).
-`ingredients` 는 다른 테이블과 연결이 없다 (bowl match 화면에서만 쓴다).
+재료(bowl match, `ingredients`)는 후속 작업으로 이번 스키마에서 제외했다. 관리자 데이터의 `ingredients[]` 는 DB 전환 후에도 당분간 저장하지 않는다 (후속 결정).
 
 ## 관리자 데이터 ↔ 테이블
 
@@ -141,13 +135,15 @@ ERD 외에 1행짜리 테이블 2개가 더 있다: `catalog_meta` (저장 버�
 | `products[].optionIds[]` | product_option_groups |
 | `groups[]` | option_groups |
 | `groups[].choices[]` | option_choices |
-| `ingredients[]` | ingredients |
+| `products[].allergens` ("닭고기, 토마토") | allergens + product_allergens (쉼표로 나눠 저장, 읽을 때 position 순서로 다시 합침) |
+| `ingredients[]` | (후속) |
 | `reviews[]` | reviews |
 | `reviews[].images[]`, `reviews[].drinks[]` | review_images, review_drinks |
 | `content` (seasonPages 제외) | site_content |
 | `content.seasonPages[]` | season_pages |
 
 이름 규칙: 코드의 camelCase 는 컬럼에서 snake_case (`detailAddress` → `detail_address`, `en` → `name_en`, `sample` → `is_sample`, `date` → `date_label`).
+리뷰의 `via`(픽업·배달)는 저장하지 않는다. 수령 방식이 배달로 고정되었다.
 
 ## 설계 결정
 
@@ -161,7 +157,8 @@ ERD 외에 1행짜리 테이블 2개가 더 있다: `catalog_meta` (저장 버�
 | enum 대신 `VARCHAR + CHECK` | 값 목록이 zod 스키마와 같이 자주 바뀐다. CHECK 는 한 줄 수정으로 바뀌지만 ENUM 은 값 삭제가 어렵다 |
 | 삭제는 `deleted` 플래그 | 관리자 화면이 삭제 후 복구를 지원한다. 리뷰·시즌이 가리키는 상품도 남아 있어야 한다 |
 | 1행 테이블 (`id = 1` CHECK) | 매장 위치·메인 문구·저장 버전은 하나뿐이다 |
-| 알레르기는 문구 그대로 (VARCHAR) | 관리자 화면이 자유 입력 문구로 받는다. 목록으로 나누는 건 화면이 바뀔 때 함께 한다 |
+| 알레르기는 allergens + product_allergens 연관 테이블 (N:M) | 팀에서 연관 관계로 관리하기로 했다. "우유가 들어간 메뉴" 조회가 쉽고 같은 재료가 오타로 두 번 생기지 않는다(UNIQUE). 관리자 화면의 문구 입력은 그대로 두고 저장할 때 쉼표로 나눈다 |
+| 정수 범위 체크 없음 (가격 0 이상·별점 1~5 만 유지) | 상한값(가격 100만 원, 사진 10장 등)은 zod 스키마가 이미 검사한다. DB 에는 값의 의미상 꼭 필요한 규칙만 둔다 |
 
 ## 저장 방식 (store.ts 교체 계획)
 
@@ -186,10 +183,8 @@ psql "$DATABASE_URL" -f db/seed.sql
 ```
 
 DBeaver 에서는 SQL 편집기에 파일 내용을 붙여넣고 **스크립트 실행(Alt+X)** 으로 schema.sql → seed.sql 순서로 실행한다.
-초기 데이터: 상품 21 (샐러드 12 · 음료 4 · 드레싱 5) · 옵션 그룹 2 · 재료 18 · 리뷰 5 · 시즌 페이지 3.
-
-> ⚠️ 지금 seed.sql 은 `lib/admin/imported-catalog.json` 기준이다. #23 이후 파일 저장소의 첫 데이터는 `customerSeed()` 가 만든다.
-> DB 연결 작업 때 `customerSeed()` 결과로 seed 를 다시 만든다.
+초기 데이터는 `customerSeed()`(파일 저장소가 처음 만들어질 때와 같은 데이터) 결과를 옮긴 것이다:
+상품 21 (샐러드 12 · 음료 4 · 드레싱 5) · 알레르기 12종 · 상품-알레르기 연결 28 · 분류 4 · 옵션 그룹 2 · 리뷰 48.
 
 ## 확인할 것
 

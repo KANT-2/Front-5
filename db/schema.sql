@@ -2,6 +2,7 @@
 -- 관리자 카탈로그(lib/admin/catalog.ts 의 catalogSchema)를 그대로 옮긴 구조.
 -- 지금 .data/admin/catalog.json 한 파일에 저장하는 내용을 테이블로 나눈다.
 -- 실행 순서: schema.sql → seed.sql
+-- 재료(bowl match)는 후속 작업으로 이번 스키마에서 제외했다.
 --
 -- 규칙
 -- - id 는 관리자 화면이 만드는 문자열 id 를 그대로 쓴다 (예: salad-0, drink-1).
@@ -33,24 +34,37 @@ CREATE TABLE categories (
 -- 상품: 샐러드 · 음료 · 드레싱을 type 으로 구분
 CREATE TABLE products (
   id           VARCHAR(80)   PRIMARY KEY CHECK (id ~ '^[a-zA-Z0-9_-]+$'),
-  customer_id  INTEGER       UNIQUE CHECK (customer_id BETWEEN 0 AND 10000),   -- 고객 주소 번호 (/product/0)
+  customer_id  INTEGER       UNIQUE,                                           -- 고객 주소 번호 (/product/0), 샐러드만
   type         VARCHAR(10)   NOT NULL CHECK (type IN ('salad', 'drink', 'dressing')),
   name         VARCHAR(80)   NOT NULL,
   name_en      VARCHAR(100),
-  price        INTEGER       NOT NULL CHECK (price BETWEEN 0 AND 1000000),     -- 샐러드 가격 · 음료 추가 금액
+  price        INTEGER       NOT NULL CHECK (price >= 0),     -- 샐러드 가격 · 음료 추가 금액
   description  VARCHAR(600)  NOT NULL DEFAULT '',
   ingredients  VARCHAR(600),
   category     VARCHAR(80)   NOT NULL,                                          -- 샐러드는 categories.name, 음료·드레싱은 '음료'·'드레싱'
   status       VARCHAR(10)   NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'soldout', 'hidden')),
   badge        VARCHAR(5)    NOT NULL DEFAULT '' CHECK (badge IN ('', 'BEST', 'NEW', 'PLANT', 'PICK')),
   image        VARCHAR(200)  NOT NULL DEFAULT '',
-  allergens    VARCHAR(400)  NOT NULL DEFAULT '',                               -- 관리자가 입력한 문구 그대로
   deleted      BOOLEAN       NOT NULL DEFAULT FALSE,                            -- 삭제해도 행은 남긴다 (리뷰·시즌 연결 보존)
   sort_order   INTEGER       NOT NULL,
   created_at   TIMESTAMPTZ   NOT NULL DEFAULT now(),
   updated_at   TIMESTAMPTZ   NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_products_type ON products (type, sort_order);
+
+-- 알레르기 유발 재료 (닭고기, 우유, 토마토 …). 이름은 중복 불가
+CREATE TABLE allergens (
+  id    INTEGER     GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  name  VARCHAR(20) NOT NULL UNIQUE
+);
+
+-- 상품 ↔ 알레르기 (N:M). 관리자 데이터의 allergens 문구("닭고기, 토마토")를 나눠 저장하고, 읽을 때 position 순서로 다시 합친다
+CREATE TABLE product_allergens (
+  product_id   VARCHAR(80) NOT NULL REFERENCES products (id)  ON DELETE CASCADE,
+  allergen_id  INTEGER     NOT NULL REFERENCES allergens (id) ON DELETE RESTRICT,
+  position     SMALLINT    NOT NULL,
+  PRIMARY KEY (product_id, allergen_id)
+);
 
 -- 옵션 그룹: 드레싱 선택(필수 1개) · 음료 추가(여러 개) · 직접 만든 그룹
 CREATE TABLE option_groups (
@@ -68,7 +82,7 @@ CREATE TABLE option_choices (
   group_id    VARCHAR(80) NOT NULL REFERENCES option_groups (id) ON DELETE CASCADE,
   id          VARCHAR(80) NOT NULL CHECK (id ~ '^[a-zA-Z0-9_-]+$'),
   name        VARCHAR(80) NOT NULL,
-  price       INTEGER     NOT NULL CHECK (price BETWEEN 0 AND 1000000),
+  price       INTEGER     NOT NULL CHECK (price >= 0),
   sort_order  INTEGER     NOT NULL,
   PRIMARY KEY (group_id, id)
 );
@@ -81,28 +95,10 @@ CREATE TABLE product_option_groups (
   PRIMARY KEY (product_id, group_id)
 );
 
--- 재료 (bowl match 에서 고르는 재료)
-CREATE TABLE ingredients (
-  id           VARCHAR(80)  PRIMARY KEY CHECK (id ~ '^[a-zA-Z0-9_-]+$'),
-  name         VARCHAR(80)  NOT NULL,
-  name_en      VARCHAR(100),
-  price        INTEGER      CHECK (price BETWEEN 0 AND 1000000),
-  stage        VARCHAR(10)  CHECK (stage IN ('GREENS', 'PROTEIN', 'VEGGIES', 'TOPPINGS')),
-  color        VARCHAR(40),
-  description  VARCHAR(600) NOT NULL DEFAULT '',
-  image        VARCHAR(200) NOT NULL DEFAULT '',
-  category     VARCHAR(80)  NOT NULL,
-  allergens    VARCHAR(400) NOT NULL DEFAULT '',
-  status       VARCHAR(10)  NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'soldout', 'hidden')),
-  deleted      BOOLEAN      NOT NULL DEFAULT FALSE,
-  sort_order   INTEGER      NOT NULL
-);
-
 -- 리뷰
 CREATE TABLE reviews (
   id          VARCHAR(80)   PRIMARY KEY CHECK (id ~ '^[a-zA-Z0-9_-]+$'),
   product_id  VARCHAR(80)   REFERENCES products (id) ON DELETE SET NULL,   -- 어떤 메뉴의 리뷰인지 (없을 수 있음)
-  via         VARCHAR(10)   CHECK (via IN ('pickup', 'delivery')),
   is_sample   BOOLEAN,                                                     -- 예시 리뷰 표시
   title       VARCHAR(200)  NOT NULL DEFAULT '',
   body        VARCHAR(10000) NOT NULL CHECK (length(body) >= 1),
@@ -118,7 +114,7 @@ CREATE TABLE reviews (
 -- 리뷰 사진 (최대 10장)
 CREATE TABLE review_images (
   review_id  VARCHAR(80)  NOT NULL REFERENCES reviews (id) ON DELETE CASCADE,
-  position   SMALLINT     NOT NULL CHECK (position BETWEEN 0 AND 9),
+  position   SMALLINT     NOT NULL,
   image      VARCHAR(200) NOT NULL CHECK (image <> ''),
   PRIMARY KEY (review_id, position)
 );
@@ -126,7 +122,7 @@ CREATE TABLE review_images (
 -- 리뷰에 적힌 함께 주문한 음료 이름
 CREATE TABLE review_drinks (
   review_id  VARCHAR(80) NOT NULL REFERENCES reviews (id) ON DELETE CASCADE,
-  position   SMALLINT    NOT NULL CHECK (position BETWEEN 0 AND 19),
+  position   SMALLINT    NOT NULL,
   name       VARCHAR(80) NOT NULL,
   PRIMARY KEY (review_id, position)
 );
