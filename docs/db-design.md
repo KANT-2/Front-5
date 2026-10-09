@@ -8,7 +8,7 @@ PostgreSQL · 정민님 원격 리눅스 서버에서 실행 · 작성: 안형�
 이 설계는 같은 데이터를 PostgreSQL 테이블로 옮긴다. **화면과 API(`/api/admin/catalog`)는 그대로 두고**,
 `lib/admin/store.ts` 의 `readCatalog` · `writeCatalog` 안쪽만 DB 조회·저장으로 바꾸는 것이 목표다.
 
-기준: `lib/admin/catalog.ts` 의 `catalogSchema` (main) + `feat/22-shared-catalog` 에서 추가된 항목.
+기준: `lib/admin/catalog.ts` 의 `catalogSchema` (main, #23 반영: customerId · 재료 stage · 리뷰 productId·via 포함).
 
 ## ERD
 
@@ -165,13 +165,18 @@ ERD 외에 1행짜리 테이블 2개가 더 있다: `catalog_meta` (저장 버�
 
 ## 저장 방식 (store.ts 교체 계획)
 
+`lib/admin/store.ts` (#23 기준)의 공개 함수 3개를 DB 로 바꾼다. 호출하는 API·화면은 그대로 둔다.
+
 | 함수 | 지금 (파일) | DB |
 | --- | --- | --- |
-| `readCatalog()` | catalog.json 읽기, 없으면 imported-catalog.json 으로 생성 | 테이블을 읽어 Catalog 객체로 조립 |
-| `writeCatalog(catalog, revision)` | 파일 잠금 → revision 비교 → 파일 교체 | **트랜잭션** 안에서 `catalog_meta` 를 `FOR UPDATE` 로 잠그고 revision 비교 → 다르면 null(409) → 같으면 테이블 내용 교체 + revision + 1 |
+| `readCatalog()` | catalog.json 읽기. 없으면 `customerSeed()` 로 생성, schemaVersion 이 3 이 아니면 `migrateCatalog` 후 저장 | 테이블을 읽어 Catalog 객체로 조립. 비어 있으면 `customerSeed()` 를 넣고 revision 1 |
+| `writeCatalog(catalog, revision)` | 파일 잠금 → revision 비교 → 샐러드에 `customerId` 부여(기존 값 유지, 새 메뉴는 최댓값+1, 최소 12) → `migrateCatalog` → 저장 | **트랜잭션** 안에서 `catalog_meta` 를 `FOR UPDATE` 로 잠그고 revision 비교 → 다르면 null(409) → 같은 규칙으로 `customer_id` 부여 → 테이블 내용 교체 + revision + 1 |
+| `appendCustomerReview(input)` | 고객이 쓴 리뷰 1개 추가. `customerId` 로 판매 중인 샐러드를 찾고, 같은 id 리뷰가 있으면 그대로 반환, 500개 한도 | 트랜잭션 안에서 `products` 조회(`customer_id`, `type = 'salad'`, `deleted = false`, `status <> 'hidden'`) → `reviews` 에 INSERT → revision + 1 |
 
-관리자 화면이 저장할 때마다 카탈로그 전체를 보내므로(PUT), 처음에는 "전체 교체" 방식으로 단순하게 구현한다.
-트랜잭션이라 중간에 실패하면 이전 상태가 그대로 남는다.
+- 관리자 화면은 저장할 때마다 카탈로그 전체를 보내므로(PUT), `writeCatalog` 는 처음에는 "전체 교체" 방식으로 단순하게 구현한다.
+- 트랜잭션이라 중간에 실패하면 이전 상태가 그대로 남는다.
+- `customer_id` 는 샐러드만 가진다 (음료·드레싱은 NULL). 기존 0~11번은 고객 주소(/product/0)와 같다.
+- 파일 방식의 `schemaVersion`·`migrateCatalog` 는 예전 JSON 을 옮길 때만 필요하다. DB 는 스키마가 곧 버전이므로 마이그레이션 SQL 로 관리한다.
 
 ## 실행 방법
 
@@ -183,9 +188,11 @@ psql "$DATABASE_URL" -f db/seed.sql
 DBeaver 에서는 SQL 편집기에 파일 내용을 붙여넣고 **스크립트 실행(Alt+X)** 으로 schema.sql → seed.sql 순서로 실행한다.
 초기 데이터: 상품 21 (샐러드 12 · 음료 4 · 드레싱 5) · 옵션 그룹 2 · 재료 18 · 리뷰 5 · 시즌 페이지 3.
 
+> ⚠️ 지금 seed.sql 은 `lib/admin/imported-catalog.json` 기준이다. #23 이후 파일 저장소의 첫 데이터는 `customerSeed()` 가 만든다.
+> DB 연결 작업 때 `customerSeed()` 결과로 seed 를 다시 만든다.
+
 ## 확인할 것
 
 - [ ] 정민님: 테이블 구조 검토, DB 이름·계정 생성, DATABASE_URL 전달
-- [ ] 서현님: store.ts 의 readCatalog·writeCatalog 를 DB 로 바꾸는 것 동의, catalog.ts 변경 계획 공유
-- [ ] 동현님: feat/22 의 customerId 가 샐러드 주소 번호(0~11)와 같은지
+- [ ] 서현님: store.ts 의 readCatalog·writeCatalog·appendCustomerReview 를 DB 로 바꾸는 것 동의, catalog.ts 변경 계획 공유
 - [ ] DB 접근 방식: `pg` 로 SQL 직접 작성 / Prisma 중 선택
