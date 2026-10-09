@@ -130,3 +130,44 @@ test('category reports preserve archived products, ties, periods and missing dat
   assert.equal(empty.totalQuantity,0);
   assert.ok(empty.rows.every(r=>r.rank===null));
 });
+
+test('salad dressing combinations preserve line associations and net salad shares', () => {
+  const paired=(id,quantity,dressing,refundedQuantity=0)=>({...item(id,quantity,refundedQuantity),dressing});
+  const lemon={productId:'lemon',productName:'주문 당시 레몬'};
+  const sesame={productId:'sesame',productName:'참깨'};
+  const expanded={products:[...products,{id:'lemon',type:'dressing',name:'레몬 올리브',deleted:false}]};
+  const source=data([
+    order('mixed', [paired('a',5,lemon,1),paired('a',2,sesame),paired('b',3,sesame),item('lemon',20,0,'dressing')]),
+    order('none',[paired('a',1,null)]),
+    order('legacy',[item('a',1)]),
+    order('cancelled',[paired('a',100,lemon)],'cancelled'),
+    order('refunded',[paired('a',100,lemon)],'refunded'),
+    order('zero',[paired('a',2,sesame,2)]),
+  ]);
+  const result=buildSalesReport(expanded,source,'all',now);
+  const a=result.combinations.filter(r=>r.saladId==='a');
+  assert.equal(a.length,4);
+  assert.equal(a.reduce((sum,r)=>sum+r.quantity,0),8);
+  assert.equal(a.reduce((sum,r)=>sum+r.share,0),100);
+  assert.ok(a.every(r=>r.saladQuantity===8));
+  assert.equal(a.find(r=>r.dressingId==='lemon').quantity,4);
+  assert.equal(a.find(r=>r.dressingId==='lemon').dressingName,'레몬 올리브');
+  assert.equal(a.find(r=>r.dressingId==='sesame').share,25);
+  assert.equal(a.find(r=>r.selection==='none').dressingName,'드레싱 없이');
+  assert.equal(a.find(r=>r.selection==='unknown').quantity,1);
+  const b=result.combinations.filter(r=>r.saladId==='b');
+  assert.equal(b.length,1);assert.equal(b[0].dressingId,'sesame');assert.equal(b[0].quantity,3);assert.equal(b[0].share,100);
+  assert.deepEqual(buildSalesReport(expanded,source,'all',now,'dressing').combinations,[]);
+});
+
+test('combination history supports removed products, Korean periods and missing selections', () => {
+  const line={...item('removed-salad',3),productName:'기록된 샐러드',dressing:{productId:'removed-dressing',productName:'기록된 드레싱'}};
+  const source=data([order('boundary',[line],'paid','2026-10-08T15:00:00Z'),order('earlier',[{...line,quantity:10}],'paid','2026-10-08T14:59:59Z'),order('future',[{...line,quantity:100}],'paid','2026-10-10T01:00:00Z')]);
+  const result=buildSalesReport(catalog,source,'today',now);
+  assert.equal(result.combinations.length,1);
+  assert.equal(result.combinations[0].saladName,'기록된 샐러드');
+  assert.equal(result.combinations[0].dressingName,'기록된 드레싱');
+  assert.equal(result.combinations[0].quantity,3);
+  assert.deepEqual(buildSalesReport(catalog,null,'all',now).combinations,[]);
+  assert.throws(()=>data([order('invalid',[{...item('a',1),dressing:{productId:'',productName:'드레싱'}}])]));
+});

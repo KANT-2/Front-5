@@ -23,6 +23,7 @@ function MenuPhoto({ row, size = 52 }: { row: SalesRow; size?: number }) {
 }
 
 export default function SalesRanking() {
+  const [combinationSalad, setCombinationSalad] = useState('');
   const [productType, setProductType] = useState<SalesProductType>('salad');
   const productLabel = { salad: '샐러드', drink: '음료', dressing: '드레싱' }[productType];
   const metric = productType === 'dressing' ? '선택' : '판매';
@@ -52,6 +53,8 @@ export default function SalesRanking() {
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void load(); }, 60000);
     return () => { controller.abort(); window.clearInterval(timer); };
   }, [period, productType, refresh]);
+  const selectedSalad = report?.combinations.some(row=>row.saladId===combinationSalad) ? combinationSalad : '';
+  const combinations = report?.combinations.filter(row=>!selectedSalad || row.saladId===selectedSalad) ?? [];
   const leaders = report?.rows.filter(row => row.rank !== null && row.rank <= 3) ?? [];
   const rankedRows = report?.rows.filter(row => row.rank !== null) ?? [];
   const rankCounts = new Map<number | null, number>();
@@ -69,6 +72,13 @@ export default function SalesRanking() {
         <div className={styles.summary}><section className="surface"><span className="meta">{productLabel} {metric} 수량</span><strong>{report.connected ? number(report.totalQuantity) : '—'}<small>개</small></strong></section><section className="surface"><span className="meta">{productLabel} 포함 주문</span><strong>{report.connected ? number(report.orderCount) : '—'}<small>건</small></strong></section><section className="surface"><span className="meta">{metric}된 {productLabel} 종류</span><strong>{report.connected ? number(report.rows.filter(row => row.quantity > 0).length) : '—'}<small>종</small></strong></section></div>
         <section aria-labelledby="sales-top-title"><div className={styles.sectionTitle}><h2 id="sales-top-title"><Trophy size={20} aria-hidden="true" />{metric} TOP 3</h2><span className="meta">{metric} 수량 기준</span></div>{leaders.length ? <div className={styles.leaders}>{leaders.map(row => <article key={row.productId} className={`surface ${styles.leader}`}><span className={styles.rank}>{tiedRanks.has(row.rank) ? '공동 ' : ''}{row.rank}위</span><MenuPhoto row={row} size={120} /><h3>{row.name}</h3>{row.archived && <span className="meta">삭제된 메뉴</span>}<strong>{number(row.quantity)}<small>개 {metric}</small></strong><span className="meta">{productLabel} 전체 {metric}의 {row.share.toFixed(1)}%</span></article>)}</div> : <div className="surface empty">{report.connected ? '선택한 기간에 판매·선택된 제품이 없습니다.' : '판매 데이터가 연결되면 상위 메뉴가 표시됩니다.'}</div>}</section>
         <section aria-labelledby="sales-all-title"><div className={styles.sectionTitle}><h2 id="sales-all-title"><BarChart3 size={20} aria-hidden="true" />{productLabel}별 {metric} 현황</h2><span className="meta">{report.rows.length}개 제품</span></div><div className={`surface ${styles.table}`}><Table><TableHeader><TableRow><TableHead>순위</TableHead><TableHead>{productLabel}</TableHead><TableHead className="text-right">{metric} 수량</TableHead><TableHead className="text-right">{metric} 비중</TableHead></TableRow></TableHeader><TableBody>{report.rows.map(row => <TableRow key={row.productId}><TableCell><span className={row.rank !== null && row.rank <= 3 ? styles.tableRank : ''}>{row.rank === null ? '—' : `${tiedRanks.has(row.rank) ? '공동 ' : ''}${row.rank}위`}</span></TableCell><TableCell><div className={styles.menu}><MenuPhoto row={row} /><div><strong>{row.name}</strong>{row.archived && <div className="meta">삭제된 메뉴 · 판매 기록 유지</div>}</div></div></TableCell><TableCell className={`text-right ${styles.quantity}`}>{report.connected ? `${number(row.quantity)}개` : '—'}</TableCell><TableCell className="text-right">{report.connected ? `${row.share.toFixed(1)}%` : '—'}</TableCell></TableRow>)}</TableBody></Table>{!report.rows.length && <p className="empty">등록된 {productLabel} 제품이 없습니다.</p>}</div></section>
+        {productType==='salad'&&<section aria-labelledby="sales-combinations-title">
+          <div className={styles.sectionTitle}><h2 id="sales-combinations-title">샐러드·드레싱 조합</h2></div>
+          <p className="muted" style={{marginBottom:16}}>각 샐러드가 어떤 드레싱과 함께 팔렸는지 확인하세요. 비중은 해당 샐러드의 순판매 수량 기준입니다.</p>
+          <label className="field" style={{maxWidth:360,marginBottom:16}}>샐러드 선택<select value={selectedSalad} onChange={e=>setCombinationSalad(e.target.value)} style={{padding:10,border:'1px solid #d5dfcc',borderRadius:8}}><option value="">전체 샐러드</option>{report.rows.filter(row=>row.quantity>0).map(row=><option key={row.productId} value={row.productId}>{row.name}</option>)}</select></label>
+          <div className={`surface ${styles.table}`}><Table><TableHeader><TableRow><TableHead>샐러드</TableHead><TableHead>드레싱</TableHead><TableHead className="text-right">조합 판매 수량</TableHead><TableHead className="text-right">샐러드 내 비중</TableHead></TableRow></TableHeader><TableBody>{combinations.map(row=><TableRow key={JSON.stringify([row.saladId,row.selection,row.dressingId])}><TableCell>{row.saladName}</TableCell><TableCell>{row.dressingName}</TableCell><TableCell className="text-right">{number(row.quantity)}개</TableCell><TableCell className="text-right">{row.share.toFixed(1)}%</TableCell></TableRow>)}</TableBody></Table>{!combinations.length&&<p className="empty">{report.connected?'선택한 기간에 판매된 조합이 없습니다.':'주문 데이터가 연결되면 조합별 판매 현황이 표시됩니다.'}</p>}</div>
+          {combinations.some(row=>row.selection==='unknown')&&<p className="meta" style={{marginTop:12}}>‘선택 정보 없음’은 주문에 드레싱 기록이 없는 판매입니다. ‘드레싱 없이’ 주문과 구분합니다.</p>}
+        </section>}
         {report.updatedAt && <p className={styles.updated}>판매 데이터 갱신: {dateTime(report.updatedAt)}</p>}
       </>}
     </div>
