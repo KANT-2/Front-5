@@ -8,7 +8,7 @@ PostgreSQL · 정민님 원격 리눅스 서버에서 실행 · 작성: 안형�
 이 설계는 같은 데이터를 PostgreSQL 테이블로 옮긴다. **화면과 API(`/api/admin/catalog`)는 그대로 두고**,
 `lib/admin/store.ts` 의 `readCatalog` · `writeCatalog` 안쪽만 DB 조회·저장으로 바꾸는 것이 목표다.
 
-기준: `lib/admin/catalog.ts` 의 `catalogSchema` (main, #23 반영). PR #24 리뷰에 따라 알레르기는 연관 테이블, 리뷰 via·재료(bowl match)는 제외.
+기준: `lib/admin/catalog.ts` 의 `catalogSchema` (main, #23 반영). PR #24 리뷰에 따라 알레르기는 연관 테이블, 리뷰 via 는 제외. 재료·재료 기준 자동 품절·메뉴별 드레싱은 아래 '재료와 재료 기준 자동 품절' 절에 추가.
 
 ## ERD
 
@@ -16,6 +16,11 @@ PostgreSQL · 정민님 원격 리눅스 서버에서 실행 · 작성: 안형�
 erDiagram
   categories ||--o{ products : "샐러드 분류"
   products ||--o{ product_allergens : ""
+  products ||--o{ product_ingredients : "레시피"
+  ingredients ||--o{ product_ingredients : ""
+  ingredients ||--o{ ingredient_allergens : ""
+  allergens ||--o{ ingredient_allergens : ""
+  products ||--o{ product_dressings : "어울리는 드레싱"
   allergens ||--o{ product_allergens : ""
   products ||--o{ product_option_groups : ""
   option_groups ||--o{ product_option_groups : ""
@@ -45,6 +50,32 @@ erDiagram
   allergens {
     int id PK
     varchar name UK
+  }
+  ingredients {
+    varchar id PK
+    varchar name
+    varchar status "active·soldout·hidden"
+    bool deleted
+    bool in_bowl_match "false 면 메뉴에만 쓰는 재료"
+    varchar stage "내 취향 찾기 단계"
+    int price "내 취향 찾기 금액"
+  }
+  ingredient_allergens {
+    varchar ingredient_id PK,FK
+    int allergen_id PK,FK
+    smallint position
+  }
+  product_ingredients {
+    varchar product_id PK,FK "샐러드만"
+    varchar ingredient_id PK,FK
+    bool is_required "false 면 품절이어도 메뉴 판매"
+    smallint position
+  }
+  product_dressings {
+    varchar product_id PK,FK "샐러드만"
+    varchar dressing_id PK,FK "드레싱만"
+    bool is_default "메뉴당 1개까지"
+    int sort_order
   }
   product_allergens {
     varchar product_id PK,FK
@@ -122,7 +153,7 @@ erDiagram
 ```
 
 ERD 외에 1행짜리 테이블 2개가 더 있다: `catalog_meta` (저장 버전 revision), `store_location` (매장 위치).
-재료(bowl match, `ingredients`)는 후속 작업으로 이번 스키마에서 제외했다. 관리자 데이터의 `ingredients[]` 는 DB 전환 후에도 당분간 저장하지 않는다 (후속 결정).
+재료(`ingredients`)와 관련 테이블은 아래 '재료와 재료 기준 자동 품절' 절에서 설명한다. 뷰 2개(`product_availability`, `bowl_match_ingredients`)도 그곳에 있다.
 
 ## 관리자 데이터 ↔ 테이블
 
@@ -136,7 +167,7 @@ ERD 외에 1행짜리 테이블 2개가 더 있다: `catalog_meta` (저장 버�
 | `groups[]` | option_groups |
 | `groups[].choices[]` | option_choices |
 | `products[].allergens` ("닭고기, 토마토") | allergens + product_allergens (쉼표로 나눠 저장, 읽을 때 position 순서로 다시 합침) |
-| `ingredients[]` | (후속) |
+| `ingredients[]` | ingredients, ingredient_allergens (+ 메뉴 전용 재료 13개를 추가) |
 | `reviews[]` | reviews |
 | `reviews[].images[]`, `reviews[].drinks[]` | review_images, review_drinks |
 | `content` (seasonPages 제외) | site_content |
@@ -159,6 +190,66 @@ ERD 외에 1행짜리 테이블 2개가 더 있다: `catalog_meta` (저장 버�
 | 1행 테이블 (`id = 1` CHECK) | 매장 위치·메인 문구·저장 버전은 하나뿐이다 |
 | 알레르기는 allergens + product_allergens 연관 테이블 (N:M) | 팀에서 연관 관계로 관리하기로 했다. "우유가 들어간 메뉴" 조회가 쉽고 같은 재료가 오타로 두 번 생기지 않는다(UNIQUE). 관리자 화면의 문구 입력은 그대로 두고 저장할 때 쉼표로 나눈다 |
 | 정수 범위 체크 없음 (가격 0 이상·별점 1~5 만 유지) | 상한값(가격 100만 원, 사진 10장 등)은 zod 스키마가 이미 검사한다. DB 에는 값의 의미상 꼭 필요한 규칙만 둔다 |
+
+## 재료와 재료 기준 자동 품절
+
+요구: "연어가 품절이면 연어 샐러드는 자동으로 품절", "치킨이 품절이면 치킨이 든 여러 메뉴가 자동 품절", 같은 규칙을 **내 취향 찾기**에도 적용, 메뉴마다 **어울리는 드레싱**을 정한다.
+
+### 추가한 것
+
+| 이름 | 종류 | 역할 |
+| --- | --- | --- |
+| `ingredients` | 테이블 | 재료 31개: 내 취향 찾기 18 + **메뉴에만 쓰는 재료 13**(루콜라, 바질, 보리, 블랙빈, 스테이크, 양배추, 양파, 에다마메, 참치, 파르메산, 페타, 허브, 현미). `in_bowl_match` 로 구분한다 |
+| `ingredient_allergens` | 테이블 | 재료별 알레르기 (상품과 같은 N:M) |
+| `product_ingredients` | 테이블 | 메뉴 ↔ 재료(레시피). `is_required=false` 인 재료는 품절이어도 메뉴가 판매된다 |
+| `product_dressings` | 테이블 | 메뉴 ↔ 어울리는 드레싱. `is_default` 는 메뉴당 1개까지 |
+| `product_availability` | **뷰** | 메뉴의 실제 판매 상태와 품절 이유(재료 이름)를 **계산**해서 돌려준다 |
+| `bowl_match_ingredients` | **뷰** | 내 취향 찾기 선택지. 품절 재료는 `available=false` 로 남긴다 |
+
+### 판매 상태 계산 규칙
+
+```
+hidden   메뉴가 숨김 또는 삭제
+soldout  메뉴가 품절이거나, 필수 재료 중 하나라도 품절·숨김·삭제
+active   그 외
+```
+
+- **품절 여부를 메뉴에 저장하지 않는다.** 재료 상태에서 그때그때 계산하므로 "치킨은 품절인데 메뉴는 판매 중" 같은 어긋남이 생기지 않고, 재료를 복구하면 메뉴도 자동으로 돌아온다.
+- 응답에 품절 이유(`soldout_ingredients`, 예: `["그릴 치킨"]`)를 같이 내려 화면에서 "치킨 품절로 주문이 어려워요"처럼 보여줄 수 있다.
+- 내 취향 찾기에서는 품절 재료를 선택 불가로 두고, 추천에서는 `effective_status <> 'active'` 인 메뉴를 제외한다 (앱 규칙).
+
+### DB 가 막아 주는 것
+
+- `product_ingredients`·`product_dressings` 는 `product_type`·`dressing_type` 열이 항상 `'salad'`·`'dressing'` 으로 채워지고 `(id, type)` 외래키를 건다. 음료·드레싱 id 를 메뉴 자리에 넣거나 음료를 드레싱으로 연결하면 거부된다.
+- 메뉴에 쓰이는 재료는 삭제할 수 없다 (`ON DELETE RESTRICT`). 삭제 대신 `deleted` 또는 품절로 처리한다.
+- 내 취향 찾기 재료(`in_bowl_match`)는 단계·금액이 필수다. 메뉴 전용 재료는 없어도 된다.
+
+### 검증 (PGlite, 실제 PostgreSQL)
+
+`check_ingredients.mjs` 시나리오 30개 통과:
+
+- 처음에는 샐러드 12개 모두 `active`
+- 치킨 품절 → **레몬 치킨 아보카도·클래식 치킨 시저·스파이시 멕시칸 세트 3개가 자동 품절**, 이유 `["그릴 치킨"]`, 치킨 없는 메뉴는 그대로, 복구하면 자동 복구
+- 연어 품절 → 연어 아보카도만, 메뉴 전용 재료(파르메산) 품절 → 스테이크 케일·클래식 치킨 시저만, 이때 내 취향 찾기 목록에는 변화 없음
+- 선택 재료(`is_required=false`) 품절은 메뉴에 영향 없음, 메뉴를 직접 품절·숨김하거나 재료를 삭제한 경우도 규칙대로
+- 잘못된 연결·중복 기본 드레싱·삭제 시도는 모두 거부
+
+### 알아둘 점
+
+- **메뉴 알레르기와 재료 알레르기 비교**: 재료에서 모은 알레르기와 지금 메뉴에 적힌 값이 12개 중 11개 같다. **클래식 치킨 시저**만 다르다 (메뉴에는 계란·생선이 있고 재료에는 없음. 시저 소스에 들어 있는 것으로 보이며 재료 목록에 소스가 없다). 그래서 메뉴 알레르기는 지금처럼 따로 저장하고, 재료는 대조용으로 쓴다.
+- **샘플 데이터**: 메뉴 전용 재료 13개의 분류·알레르기(예: 보리→밀, 스테이크→쇠고기)와 메뉴별 드레싱(지금은 12개 메뉴에 드레싱 5개를 모두 허용)은 **예시 값**이다. 팀이 확정한 값으로 바꾼다.
+- **세트에 포함된 음료**(오렌지 주스, 커피)는 재료가 아니라 음료 상품이라 연결하지 않았다. 음료 품절이 세트 품절로 이어져야 하는지는 정해야 한다.
+- 관리자 데이터(`catalog.ts`)에 메뉴의 재료 목록(`ingredientIds`)과 드레싱 목록(`dressingIds`)이 있어야 이 표를 채울 수 있다 (관리자 화면 담당과 협의).
+
+### 정해야 할 것
+
+| # | 질문 | 이 문서의 가정 |
+| --- | --- | --- |
+| 1 | 메뉴 전용 재료 13개를 재료 테이블에 둔다 | 둔다. 내 취향 찾기에는 나오지 않는다 |
+| 2 | 세트의 음료 품절이 세트 품절로 이어지나 | 이어지지 않는다 (미정) |
+| 3 | 숨김·삭제 재료의 메뉴 | 품절과 똑같이 취급 |
+| 4 | 선택 재료(토핑) 품절 | `is_required` 로 구분, 기본은 필수 |
+| 5 | 메뉴별 드레싱 | 팀(매장 기준)이 확정. '드레싱 없이'는 항상 허용 |
 
 ## 저장 방식 (store.ts 교체 계획)
 
@@ -184,10 +275,11 @@ psql "$DATABASE_URL" -f db/seed.sql
 
 DBeaver 에서는 SQL 편집기에 파일 내용을 붙여넣고 **스크립트 실행(Alt+X)** 으로 schema.sql → seed.sql 순서로 실행한다.
 초기 데이터는 `customerSeed()`(파일 저장소가 처음 만들어질 때와 같은 데이터) 결과를 옮긴 것이다:
-상품 21 (샐러드 12 · 음료 4 · 드레싱 5) · 알레르기 12종 · 상품-알레르기 연결 28 · 분류 4 · 옵션 그룹 2 · 리뷰 48.
+상품 21 (샐러드 12 · 음료 4 · 드레싱 5) · 알레르기 15종 · 상품-알레르기 연결 28 · 분류 4 · 옵션 그룹 2 · 리뷰 48 · 재료 31 · 메뉴-재료 49 · 메뉴-드레싱 60.
 
 ## 확인할 것
 
 - [ ] 정민님: 테이블 구조 검토, DB 이름·계정 생성, DATABASE_URL 전달
 - [ ] 서현님: store.ts 의 readCatalog·writeCatalog·appendCustomerReview 를 DB 로 바꾸는 것 동의, catalog.ts 변경 계획 공유
-- [ ] DB 접근 방식: `pg` 로 SQL 직접 작성 / Prisma 중 선택
+- [ ] DB 접근 방식: Prisma (정민님 설계 PR #45). 이 문서의 `db/schema.sql` 은 기존 DB 를 `db pull` 로 가져올 때 기준(baseline)이 된다
+- [ ] 재료·메뉴별 드레싱: 위 '정해야 할 것' 5개, 관리자 화면의 재료·드레싱 선택 (서현님)
