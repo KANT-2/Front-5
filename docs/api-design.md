@@ -1,165 +1,132 @@
-# leaf & bowl API 설계안 (페이지 기준)
+# leaf & bowl API 경로 설계안
 
-작성: 안형준 (백엔드) · 기준: main `d98dead` (#26) · 상태: **검토 요청**
+작성: 안형준 (백엔드) · 기준: main `bb3ac1b` · 상태: **검토 요청**
 
-## 1. 지금 구조
+이 문서는 **API 경로(URL·메서드)를 어떻게 정할지**만 다룬다. 내부 구조·저장소(DB) 이야기는 `docs/db-design.md` 에 있다.
 
-### 페이지가 데이터를 받는 방법
+## 1. 경로 규칙
 
-```
-[고객 페이지 (서버 컴포넌트)] ── readCustomerCatalog() ──┐
-[고객 화면 자동 갱신]          ── GET /api/catalog ───────┤
-[리뷰 쓰기]                   ── POST /api/reviews ──────┼─→ lib/admin/store.ts ─→ .data/admin/catalog.json
-[관리자 화면]                 ── GET·PUT /api/admin/catalog ┘        (DB 전환 예정: PR #24)
-
-[GET /api/products, /api/products/{id}]  ─┐
-[PATCH /api/admin/products/{id}]         ─┴─→ lib/products-repository.ts ─→ data/products.ts 복사본 (메모리)
-```
-
-### 문제점
-
-| # | 문제 | 영향 |
+| # | 규칙 | 예 |
 | --- | --- | --- |
-| 1 | `/api/products` 계열(#30)이 카탈로그가 아니라 `data/products.ts` 복사본을 읽는다 | 관리자가 가격을 바꿔도 `/api/products` 에는 반영되지 않는다. 반대로 `PATCH /api/admin/products` 로 바꾼 값은 화면에 안 나오고 서버를 다시 켜면 사라진다 |
-| 2 | 상품 id 기준이 다르다 | 카탈로그는 `salad-0`·`customerId`, `/api/products` 는 data 배열 위치 |
-| 3 | 에러 응답 모양이 두 가지 | 관리자·리뷰 API `{ "error": "..." }`, 상품 API `{ "message": "..." }` |
-| 4 | 페이지별 API 가 없다 | 고객 화면은 카탈로그 전체를 한 번에 받는다. 동작은 하지만 README·발표에서 "어떤 페이지가 무엇을 받는지" 설명하기 어렵다 |
+| 1 | 모든 API 는 `/api` 로 시작한다. 고객용은 접두사 없이, 관리자용은 `/api/admin` 아래에 둔다 | `/api/products`, `/api/admin/products` |
+| 2 | 경로에는 **명사(복수형)** 만 쓰고, 동작은 HTTP 메서드로 표현한다 | `GET`=조회, `POST`=만들기, `PATCH`=일부 수정, `PUT`=전체 교체 |
+| 3 | 소유 관계는 경로의 계층으로 표현한다 | 메뉴의 리뷰 → `/api/products/{id}/reviews` |
+| 4 | 조건·정렬·쪽 나눔은 쿼리 문자열로 받는다 | `?category=`, `?page=1&size=10` |
+| 5 | 단어가 둘 이상이면 소문자 + 하이픈 | `/api/admin/season-pages` |
+| 6 | 같은 자원은 같은 이름을 쓴다 (고객·관리자 모두 `products`) | |
+| 7 | 고객 경로의 `{id}` 는 화면 주소 번호(`/product/0` 의 0), 관리자 경로의 `{key}` 는 카탈로그 id(`salad-0`) | 고객은 숫자, 관리자는 문자열 |
 
-## 2. 설계 원칙
-
-1. **데이터 창구는 하나**: 모든 API 는 `lib/admin/store.ts`(→ PostgreSQL)만 거친다. `data/products.ts` 는 초기 데이터(seed) 용도로만 남긴다.
-2. **고객 주소 번호 = `customerId`**: `/product/0` 의 0. 관리자 API 는 문자열 id(`salad-0`)를 쓴다.
-3. **에러는 `{ "error": "메시지" }` 하나로**: 기존 관리자·리뷰 API 와 맞춘다.
-4. **읽기는 캐시 없이**(`Cache-Control: no-store`), **쓰기는** 기존 규칙 유지: 같은 출처 확인(`sameOrigin`), zod 검사, 본문 크기 제한, revision 충돌 시 409.
-5. **숨김·삭제 상품은 고객 API 에 나오지 않는다.** 품절(`soldout`)은 나오되 `status` 로 표시한다.
-
-## 3. 페이지별 API
+## 2. 경로 한눈에 보기
 
 ### 고객
 
-| 페이지 | API | 응답 | 비고 |
-| --- | --- | --- | --- |
-| 메인 `/` | `GET /api/home` | 배너 문구, 시즌 스페셜, BEST 메뉴, 최근 리뷰 | 신규 |
-| 메뉴 `/menu` | `GET /api/products?type=salad&category={분류}` | `ProductSummary[]` + 분류 목록 | 기존 `/api/products` 를 카탈로그 기준으로 교체 |
-| 음료 `/drinks` | `GET /api/products?type=drink` | `ProductSummary[]` | 같은 API, type 만 다름 |
-| 상세 `/product/{id}` | `GET /api/products/{customerId}` | `ProductDetail` (알레르기, 옵션 그룹·선택지, 별점) | 기존 API 교체 |
-| 메뉴 리뷰 `/product/{id}/reviews` | `GET /api/products/{customerId}/reviews?page=1&size=10` | `Page<Review>` + 평균 별점 | 신규 |
-| 〃 리뷰 쓰기 | `POST /api/products/{customerId}/reviews` | 저장된 `Review` (201) | 지금 `POST /api/reviews` 와 같은 동작, 주소만 메뉴 아래로 |
-| 전체 리뷰 `/reviews` | `GET /api/reviews?page=1&size=10&rating=5` | `Page<Review>` | 신규 (GET 추가) |
-| 자동 갱신 | `GET /api/catalog` | 카탈로그 전체 | **유지**. 지금 화면이 이걸로 동작한다 |
-| 장바구니 | 없음 | | 브라우저에만 저장 (과제 범위: 서버 저장 제외) |
-| 내 취향 찾기 `/match` | 후속 | | bowl match 는 후속 결정 (#24 리뷰) |
+| 페이지 | 메서드 · 경로 | 쿼리 | 응답 | 상태 |
+| --- | --- | --- | --- | --- |
+| 메인 `/` | `GET /api/home` | | 배너 문구, 시즌 스페셜, BEST 메뉴, 최근 리뷰 | 신규 |
+| 메뉴 `/menu` | `GET /api/products` | `category` | 샐러드 목록 + 분류 목록 | 변경 (§3-1) |
+| 음료 `/drinks` | `GET /api/drinks` | | 음료 목록 | 신규 (§3-1) |
+| 상세 `/product/{id}` | `GET /api/products/{id}` | | 상세 (알레르기, 드레싱·음료 옵션, 별점) | 변경 |
+| 메뉴 리뷰 `/product/{id}/reviews` | `GET /api/products/{id}/reviews` | `page`, `size` | 리뷰 목록 + 평균 별점 | 신규 |
+| 〃 리뷰 쓰기 | `POST /api/products/{id}/reviews` | | 저장된 리뷰 (201) | 이동 (§3-2) |
+| 전체 리뷰 `/reviews` | `GET /api/reviews` | `page`, `size` | 전체 리뷰 목록 | 신규 |
+| 화면 자동 갱신 | `GET /api/catalog` | | 카탈로그 전체 | 유지 (§3-3) |
 
 ### 관리자
 
-| 화면 | API | 비고 |
+| 화면 | 메서드 · 경로 | 응답 | 상태 |
+| --- | --- | --- | --- |
+| 전체 불러오기 | `GET /api/admin/catalog` | 카탈로그 전체 + `revision` | 유지 |
+| 전체 저장 | `PUT /api/admin/catalog` | 저장된 카탈로그 (`revision` 이 다르면 409) | 유지 |
+| 메뉴 1개 수정 | `PATCH /api/admin/products/{key}` | 수정된 메뉴 | 변경 |
+| 이미지 올리기 | `POST /api/admin/images` | 이미지 주소 | 유지 |
+| 이미지 보기 | `GET /api/admin/images/{key}` | 이미지 파일 | 유지 |
+| 로그인 | `POST /api/admin/login` | 후속 | 후속 |
+
+`GET /admin/preview` 는 API 가 아니라 관리자용 고객 미리보기 화면이라 이 설계에서 제외한다.
+
+## 3. 결정이 필요한 경로
+
+### 3-1. 음료를 `/api/drinks` 로 분리할지
+
+| 안 | 경로 | 장단점 |
 | --- | --- | --- |
-| 전체 불러오기·저장 | `GET·PUT /api/admin/catalog` | **유지**. 저장 단위가 카탈로그 전체 + revision(409) |
-| 이미지 | `POST /api/admin/images`, `GET /api/admin/images/{key}` | **유지** |
-| 메뉴 1개 수정 | `PATCH /api/admin/products/{productId}` | 카탈로그 기준으로 교체. `{ price, status, badge, ... }` 보낸 항목만 수정, revision 증가 |
+| **A (추천)** | 메뉴 `GET /api/products`, 음료 `GET /api/drinks` | 페이지(`/menu`, `/drinks`)와 경로가 1:1 로 맞아 읽기 쉽다. 드레싱은 메뉴 상세의 옵션으로만 내려가므로 따로 경로를 두지 않는다 |
+| B | `GET /api/products?type=drink` | 경로는 하나지만 같은 경로가 타입에 따라 전혀 다른 응답(샐러드·음료)을 준다 |
 
-관리자 화면은 지금처럼 전체 저장(PUT)을 쓰고, PATCH 는 "가격만 빠르게 바꾸기" 같은 단건 수정용으로 둔다.
+### 3-2. 리뷰 쓰기 주소
 
-## 4. 응답 모양
+| 안 | 경로 | 비고 |
+| --- | --- | --- |
+| **A (추천)** | `POST /api/products/{id}/reviews` | "이 메뉴의 리뷰를 만든다"가 경로에 드러난다. 본문에서 `pid` 가 사라진다 |
+| B | 지금처럼 `POST /api/reviews` (본문에 `pid`) | 화면 코드 수정이 없다 |
 
-```ts
-// 목록 카드
-interface ProductSummary {
-  id: number;               // customerId (음료·드레싱은 null)
-  key: string;              // 카탈로그 id: "salad-0"
-  type: "salad" | "drink" | "dressing";
-  name: string;
-  nameEn: string | null;
-  price: number;
-  category: string;         // "든든한 단백질"
-  badge: "" | "BEST" | "NEW" | "PLANT" | "PICK";
-  status: "active" | "soldout";
-  imageUrl: string;
-  allergens: string[];      // ["닭고기", "토마토"]
-}
+A 로 바꾸면 화면(`ReviewsProvider`)의 호출 주소를 바꿔야 하고, 리뷰 사진 PR(#28)이 같은 파일을 수정 중이라 **그 PR 머지 후에 이동**한다. 옮기는 동안에는 기존 `POST /api/reviews` 도 함께 둔다.
 
-// 상세
-interface ProductDetail extends ProductSummary {
-  description: string;
-  ingredients: string | null;
-  optionGroups: {
-    id: string;             // "dressing"
-    name: string;           // "드레싱 선택"
-    required: boolean;
-    multiple: boolean;
-    choices: { key: string; name: string; price: number; available: boolean; allergens: string[] }[];
-  }[];
-  rating: { average: number; count: number };
-}
+### 3-3. `/api/catalog` 와 `/api/home` 의 역할
 
-interface Review {
-  id: string;
-  productId: number | null; // customerId
-  rating: number;           // 1~5
-  title: string;
-  body: string;
-  author: string;           // "김**"
-  date: string;             // "2026.10.05"
-  images: string[];
-}
+| 경로 | 쓰임 |
+| --- | --- |
+| `GET /api/catalog` | 화면이 **자동 갱신**할 때 카탈로그 전체를 받는다 (지금 화면이 사용 중) |
+| `GET /api/home` | **메인 한 화면**에 필요한 것만 받는다 |
 
-interface Page<T> { items: T[]; page: number; size: number; total: number }
+둘을 합칠지, 메인만 `/api/home` 으로 둘지 정한다. 추천은 `/api/catalog` 를 그대로 두고 `/api/home` 은 문서·시연용 요약 API 로 추가하는 것이다.
 
-// 메인
-interface Home {
-  hero: { title: string; description: string };
-  seasonPages: { title: string; description: string; image: string; productId: number | null }[];
-  best: ProductSummary[];
-  latestReviews: Review[];
-}
+### 3-4. 관리자 메뉴 수정에서 `PUT` 과 `PATCH`
+
+| | 용도 |
+| --- | --- |
+| `PUT /api/admin/catalog` | 관리자 화면의 **저장 버튼**. 전체를 보내고 `revision` 으로 충돌을 막는다 |
+| `PATCH /api/admin/products/{key}` | "가격만 바꾸기" 같은 **보낸 항목만 수정**. 같은 `revision` 규칙을 쓴다 |
+
+## 4. 요청·응답 규칙
+
+### 쪽 나눔 응답
+
+```json
+{ "items": [ ... ], "page": 1, "size": 10, "total": 48 }
 ```
 
-### 예: `GET /api/products/0`
+`page` 는 1 부터, `size` 는 1~50 (기본 10).
+
+### 에러 응답 (모든 API 공통)
+
+```json
+{ "error": "상품을 찾을 수 없습니다." }
+```
+
+| 상태 | 언제 |
+| --- | --- |
+| 400 | 잘못된 값 (모르는 분류, 형식이 틀린 `page`·`size`, 입력 검사 실패) |
+| 403 | 다른 사이트에서 보낸 쓰기 요청 |
+| 404 | 없는 메뉴, 숨김·삭제된 메뉴 |
+| 409 | 관리자 저장 충돌 (`revision` 이 다름) |
+| 413 | 본문이 너무 큼 |
+| 503 | 저장소 오류 |
+
+### 노출 규칙
+
+- 숨김·삭제된 상품은 고객 API 에 나오지 않는다. 품절은 나오되 `status: "soldout"` 로 표시한다.
+- 고객 API 는 모두 `Cache-Control: no-store`.
+
+## 5. 응답 예: `GET /api/products/0`
 
 ```json
 {
-  "id": 0, "key": "salad-0", "type": "salad",
-  "name": "레몬 치킨 아보카도", "nameEn": "Lemon chicken avocado",
+  "id": 0, "key": "salad-0", "name": "레몬 치킨 아보카도",
   "price": 10900, "category": "든든한 단백질", "badge": "BEST", "status": "active",
-  "imageUrl": "/images/salad-00-cutout.png", "allergens": ["닭고기", "토마토"],
-  "description": "그릴 치킨, 잘 익은 아보카도, 상큼한 레몬의 조합",
-  "ingredients": "로메인 · 치킨 · 아보카도 · 퀴노아 · 토마토",
+  "allergens": ["닭고기", "토마토"],
   "optionGroups": [
     { "id": "dressing", "name": "드레싱 선택", "required": true, "multiple": false,
-      "choices": [{ "key": "dressing-0", "name": "레몬 올리브", "price": 0, "available": true, "allergens": [] }] }
+      "choices": [{ "key": "dressing-0", "name": "레몬 올리브", "price": 0, "available": true }] }
   ],
   "rating": { "average": 4.6, "count": 4 }
 }
 ```
 
-## 5. 상태 코드
+## 6. 검토 받을 것
 
-| 코드 | 언제 | 본문 |
-| --- | --- | --- |
-| 200 | 조회·수정 성공 | 데이터 |
-| 201 | 리뷰 작성 성공 | 저장된 Review |
-| 400 | 잘못된 값 (zod 실패, 모르는 분류·type) | `{ "error": "리뷰 내용을 확인해주세요." }` |
-| 403 | 다른 사이트에서 보낸 쓰기 요청 | `{ "error": "허용되지 않은 요청입니다." }` |
-| 404 | 없는 상품·숨김·삭제 상품 | `{ "error": "상품을 찾을 수 없습니다." }` |
-| 409 | 관리자 저장 충돌 (revision 다름) | `{ "error": "다른 화면에서 데이터가 변경되었습니다. ..." }` |
-| 413 | 본문이 너무 큼 | `{ "error": "..." }` |
-| 503 | 저장소(DB) 오류 | `{ "error": "..." }` |
-
-## 6. 진행 순서 (제안)
-
-| 단계 | 내용 | 바뀌는 파일 |
-| --- | --- | --- |
-| 1 | 고객 읽기 API 를 카탈로그 기준으로: `/api/products`, `/api/products/{id}`, `/api/products/{id}/reviews`, `/api/reviews`(GET), `/api/home` | `app/api/**`, `lib/customer/api.ts`(신규, 응답 변환) |
-| 2 | `PATCH /api/admin/products/{id}` 를 카탈로그 기준으로 교체, `lib/products-repository.ts` 삭제 | `app/api/admin/products/[id]`, `lib/products-repository.ts` |
-| 3 | 에러 모양 `{ error }` 통일 | `types/api.ts` |
-| 4 | `store.ts` 를 PostgreSQL 로 교체 (PR #24 설계) | `lib/admin/store.ts`. API 는 그대로 |
-
-1~3 은 DB 없이 지금 할 수 있고, 4 를 하면 모든 API 가 자동으로 DB 를 쓴다.
-고객 화면 코드는 바꾸지 않는다 (지금처럼 서버 컴포넌트·`/api/catalog` 사용). 새 API 는 페이지 단위 조회가 필요할 때와 문서·시연용으로 쓴다.
-
-## 7. 검토 받을 것
-
-- [ ] 페이지별 API 목록과 주소 (특히 리뷰 쓰기를 `/api/products/{id}/reviews` 로 옮기는 것)
-- [ ] 응답 필드 이름 (`id`=customerId, `key`=카탈로그 id)
-- [ ] `/api/products` 계열을 카탈로그 기준으로 바꾸고 `products-repository.ts` 를 지우는 것 (#30 코드 변경 → 서현님 확인)
-- [ ] 메인용 `/api/home` 이 필요한지, 아니면 `/api/catalog` 로 충분한지
+- [ ] §1 경로 규칙
+- [ ] §3-1 음료 경로 (A `/api/drinks` / B `?type=drink`)
+- [ ] §3-2 리뷰 쓰기 경로 (A `/api/products/{id}/reviews` / B 지금처럼)
+- [ ] §3-3 `/api/home` 을 둘지
+- [ ] 빠졌거나 이름을 바꾸고 싶은 경로
