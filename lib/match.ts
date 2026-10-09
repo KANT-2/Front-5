@@ -30,6 +30,11 @@ export function bowlPrice(list: Ingredient[]): number {
   return BASE_BOWL_PRICE + list.reduce((n, i) => n + i.price, 0);
 }
 
+/** 조합의 "주된 재료": 추가 금액이 가장 비싼 재료 (동점이면 먼저 고른 것) */
+export function mainIngredient(list: Ingredient[]): Ingredient {
+  return list.reduce((main, i) => (i.price > main.price ? i : main));
+}
+
 /** 고른 재료와 가장 비슷한 메뉴 번호 (완성 사진과 "비슷한 메뉴 보기"에 쓴다) */
 export function matchProduct(ids: string[]): number {
   if (ids.includes("burrata")) return 9;

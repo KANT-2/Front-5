@@ -20,6 +20,7 @@ import {
   bowlPrice,
   decisionsStore,
   ingredientPhoto,
+  mainIngredient,
   matchProduct,
   recipeStore,
   type Decision,
@@ -394,7 +395,7 @@ function BowlMatchBody({ingredients}:{ingredients:Ingredient[]}) {
       toast("좋아하는 재료를 먼저 담아주세요");
       return;
     }
-    setName(preset?.name ?? `나의 ${list[0].name} 볼`);
+    setName(preset?.name ?? `나의 ${mainIngredient(list).name} 볼`);
     setDressing(preset?.dressing ?? 0);
     setSavedNote("");
     setResultOpen(true);
