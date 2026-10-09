@@ -271,3 +271,43 @@ test('permanently deleted reviews stay removed after reload and later saves', as
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('purged review retries cannot restore content and deletion IDs remain internal', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'front5-review-retry-'));
+  const previous = process.env.ADMIN_DATA_DIR;
+  process.env.ADMIN_DATA_DIR = directory;
+  try {
+    const { readCatalog, writeCatalog, appendCustomerReview } = require('../lib/admin/store.ts');
+    const payload = { id: 'purged-retry', pid: 0, author: '검증', stars: 5, title: '삭제 대상', text: '삭제할 본문', via: 'delivery' };
+    let state = await appendCustomerReview(payload);
+    const removedReview = state.catalog.reviews.find(r => r.id === payload.id);
+    state = await writeCatalog({ ...state.catalog, reviews: state.catalog.reviews.filter(r => r.id !== payload.id) }, state.revision);
+    const revision = state.revision;
+    state = await appendCustomerReview(payload);
+    assert.equal(state.revision, revision);
+    assert.ok(!state.catalog.reviews.some(r => r.id === payload.id));
+    assert.ok(!('deletedReviewIds' in state));
+    state = await appendCustomerReview({ ...payload, id: 'fresh-review' });
+    assert.ok(state.catalog.reviews.some(r => r.id === 'fresh-review'));
+    state = await writeCatalog({ ...state.catalog, reviews: [...state.catalog.reviews, removedReview] }, state.revision);
+    assert.ok(!state.catalog.reviews.some(r => r.id === payload.id));
+    const { reviews: omittedReviews, ...withoutReviews } = state.catalog;
+    assert.ok(omittedReviews.length);
+    state = await writeCatalog(withoutReviews, state.revision);
+    assert.ok(state.catalog.reviews.some(r => r.id === 'fresh-review'));
+    state = await readCatalog();
+    assert.ok(!('deletedReviewIds' in state));
+    const disk = JSON.parse(fs.readFileSync(path.join(directory, 'catalog.json'), 'utf8'));
+    assert.ok(disk.deletedReviewIds.includes(payload.id));
+    assert.ok(!disk.catalog.reviews.some(r => r.id === payload.id));
+    state = await appendCustomerReview(payload);
+    assert.ok(!state.catalog.reviews.some(r => r.id === payload.id));
+    state = await writeCatalog({ ...state.catalog, reviews: state.catalog.reviews.map(r => r.id === 'fresh-review' ? { ...r, deleted: true } : r) }, state.revision);
+    state = await writeCatalog({ ...state.catalog, reviews: state.catalog.reviews.map(r => r.id === 'fresh-review' ? { ...r, deleted: false } : r) }, state.revision);
+    assert.equal(state.catalog.reviews.find(r => r.id === 'fresh-review').deleted, false);
+  } finally {
+    if (previous === undefined) delete process.env.ADMIN_DATA_DIR;
+    else process.env.ADMIN_DATA_DIR = previous;
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
