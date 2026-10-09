@@ -2,7 +2,7 @@
 -- 관리자 카탈로그(lib/admin/catalog.ts 의 catalogSchema)를 그대로 옮긴 구조.
 -- 지금 .data/admin/catalog.json 한 파일에 저장하는 내용을 테이블로 나눈다.
 -- 실행 순서: schema.sql → seed.sql
--- 재료(bowl match)는 후속 작업으로 이번 스키마에서 제외했다.
+-- 재료와 재료 기준 자동 품절은 맨 아래 '재료' 절에 있다.
 --
 -- 규칙
 -- - id 는 관리자 화면이 만드는 문자열 id 를 그대로 쓴다 (예: salad-0, drink-1).
@@ -149,3 +149,93 @@ CREATE TABLE season_pages (
   visible     BOOLEAN      NOT NULL DEFAULT TRUE,
   sort_order  INTEGER      NOT NULL
 );
+
+-- ─────────────────────────────────────────────────────────────
+-- 재료와 재료 기준 자동 품절
+-- ─────────────────────────────────────────────────────────────
+
+-- (id, type) 로도 참조할 수 있게 한다. 아래 연결 테이블이 "이 id 는 샐러드/드레싱이어야 한다"를 DB 에서 막는 데 쓴다
+ALTER TABLE products ADD CONSTRAINT uq_products_id_type UNIQUE (id, type);
+
+-- 재료. 내 취향 찾기(bowl match)에서 고르는 재료와, 메뉴에만 쓰는 재료(파르메산 등)를 함께 둔다
+CREATE TABLE ingredients (
+  id             VARCHAR(80)   PRIMARY KEY CHECK (id ~ '^[a-zA-Z0-9_-]+$'),
+  name           VARCHAR(80)   NOT NULL,
+  name_en        VARCHAR(100),
+  price          INTEGER       CHECK (price >= 0),                 -- 내 취향 찾기에서 더하는 금액
+  stage          VARCHAR(10)   CHECK (stage IN ('GREENS', 'PROTEIN', 'VEGGIES', 'TOPPINGS')),
+  color          VARCHAR(40),
+  description    VARCHAR(600)  NOT NULL DEFAULT '',
+  image          VARCHAR(200)  NOT NULL DEFAULT '',
+  category       VARCHAR(80)   NOT NULL,
+  status         VARCHAR(10)   NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'soldout', 'hidden')),
+  deleted        BOOLEAN       NOT NULL DEFAULT FALSE,
+  in_bowl_match  BOOLEAN       NOT NULL DEFAULT TRUE,              -- false 면 메뉴에만 쓰고 내 취향 찾기 선택지에는 나오지 않는다
+  sort_order     INTEGER       NOT NULL,
+  -- 내 취향 찾기에서 고르려면 단계와 금액이 있어야 한다
+  CONSTRAINT chk_bowl_match_fields CHECK (NOT in_bowl_match OR (stage IS NOT NULL AND price IS NOT NULL))
+);
+
+-- 재료 ↔ 알레르기 (N:M, 상품과 같은 방식)
+CREATE TABLE ingredient_allergens (
+  ingredient_id  VARCHAR(80) NOT NULL REFERENCES ingredients (id) ON DELETE CASCADE,
+  allergen_id    INTEGER     NOT NULL REFERENCES allergens (id)   ON DELETE RESTRICT,
+  position       SMALLINT    NOT NULL,
+  PRIMARY KEY (ingredient_id, allergen_id)
+);
+
+-- 메뉴 ↔ 재료 (레시피). product_type 은 항상 'salad' 로 채워지는 열이라, 음료·드레싱 id 를 넣으면 외래키가 거부한다
+CREATE TABLE product_ingredients (
+  product_id     VARCHAR(80) NOT NULL,
+  product_type   VARCHAR(10) GENERATED ALWAYS AS ('salad') STORED,
+  ingredient_id  VARCHAR(80) NOT NULL REFERENCES ingredients (id) ON DELETE RESTRICT,
+  is_required    BOOLEAN     NOT NULL DEFAULT TRUE,                 -- false 면 이 재료가 품절이어도 메뉴는 품절이 아니다 (선택 토핑)
+  position       SMALLINT    NOT NULL,
+  PRIMARY KEY (product_id, ingredient_id),
+  FOREIGN KEY (product_id, product_type) REFERENCES products (id, type) ON DELETE CASCADE
+);
+CREATE INDEX idx_product_ingredients_ingredient ON product_ingredients (ingredient_id);
+
+-- 메뉴 ↔ 어울리는 드레싱. 행이 있으면 그 드레싱만 보여준다. '드레싱 없이'는 모든 메뉴에 항상 둔다 (앱 규칙)
+CREATE TABLE product_dressings (
+  product_id     VARCHAR(80) NOT NULL,
+  product_type   VARCHAR(10) GENERATED ALWAYS AS ('salad') STORED,
+  dressing_id    VARCHAR(80) NOT NULL,
+  dressing_type  VARCHAR(10) GENERATED ALWAYS AS ('dressing') STORED,
+  is_default     BOOLEAN     NOT NULL DEFAULT FALSE,
+  sort_order     INTEGER     NOT NULL,
+  PRIMARY KEY (product_id, dressing_id),
+  FOREIGN KEY (product_id, product_type)   REFERENCES products (id, type) ON DELETE CASCADE,
+  FOREIGN KEY (dressing_id, dressing_type) REFERENCES products (id, type) ON DELETE CASCADE
+);
+-- 메뉴마다 기본 드레싱은 하나까지
+CREATE UNIQUE INDEX uq_product_dressings_default ON product_dressings (product_id) WHERE is_default;
+
+-- 메뉴의 실제 판매 상태. 저장하지 않고 재료 상태에서 계산한다 (저장하면 서로 어긋날 수 있다)
+--   hidden  : 메뉴가 숨김·삭제
+--   soldout : 메뉴가 품절이거나, 필수 재료 중 하나라도 품절·숨김·삭제
+--   active  : 그 외
+CREATE VIEW product_availability AS
+SELECT
+  p.id           AS product_id,
+  p.customer_id,
+  CASE
+    WHEN p.deleted OR p.status = 'hidden'                 THEN 'hidden'
+    WHEN p.status = 'soldout' OR cardinality(r.names) > 0 THEN 'soldout'
+    ELSE 'active'
+  END            AS effective_status,
+  r.names        AS soldout_ingredients     -- 품절 이유로 화면에 보여줄 재료 이름
+FROM products p
+LEFT JOIN LATERAL (
+  SELECT COALESCE(array_agg(i.name ORDER BY pi.position), ARRAY[]::text[]) AS names
+  FROM product_ingredients pi
+  JOIN ingredients i ON i.id = pi.ingredient_id
+  WHERE pi.product_id = p.id AND pi.is_required AND (i.deleted OR i.status <> 'active')
+) r ON TRUE
+WHERE p.type = 'salad';
+
+-- 내 취향 찾기 선택지. 품절 재료는 목록에 남기되 available = false (선택 불가)
+CREATE VIEW bowl_match_ingredients AS
+SELECT i.*, (i.status = 'active') AS available
+FROM ingredients i
+WHERE i.in_bowl_match AND NOT i.deleted AND i.status <> 'hidden';
