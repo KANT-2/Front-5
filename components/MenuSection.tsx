@@ -7,6 +7,7 @@ import PageHeading from "./PageHeading";
 import ProductCard from "./ProductCard";
 import { useReviews } from "./ReviewsProvider";
 import { MATCH_URL, type Product } from "@/lib/products";
+import { ALLERGEN_ORDER } from "@/lib/allergens";
 
 type Filter = string;
 
@@ -24,8 +25,6 @@ const SORTS: { key: SortKey; label: string }[] = [
 ];
 
 // 메뉴에 실제로 있는 알레르기만 (보여주는 순서 고정)
-const ALLERGEN_ORDER = ["닭고기", "연어", "새우", "대두", "우유", "쇠고기", "참치", "밀", "계란", "생선", "토마토"];
-
 
 export default function MenuSection() {
   const { NUTRITION } = useCustomerCatalog();
