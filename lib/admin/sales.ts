@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import type { Catalog } from './catalog';
 
+export const salesProductTypes = ['salad', 'drink', 'dressing'] as const;
+export type SalesProductType = typeof salesProductTypes[number];
+
 export const salesPeriods = ['all', 'today', '7d', '30d'] as const;
 export type SalesPeriod = typeof salesPeriods[number];
 export const salesDataSchema = z.object({
@@ -24,7 +27,7 @@ export type SalesRow = {
   rank: number | null; share: number; archived: boolean;
 };
 export type SalesReport = {
-  period: SalesPeriod; connected: boolean; updatedAt: string | null;
+  productType: SalesProductType; period: SalesPeriod; connected: boolean; updatedAt: string | null;
   totalQuantity: number; orderCount: number; rows: SalesRow[];
 };
 
@@ -36,8 +39,8 @@ export function salesPeriodStart(period: SalesPeriod, now: Date): number {
   return Date.parse(`${koreanDay}T00:00:00+09:00`) - (days - 1) * 86400000;
 }
 
-export function buildSalesReport(catalog: Catalog, data: SalesData | null, period: SalesPeriod, now = new Date()): SalesReport {
-  const products = new Map(catalog.products.filter(p => p.type === 'salad').map(p => [p.id, p]));
+export function buildSalesReport(catalog: Catalog, data: SalesData | null, period: SalesPeriod, now = new Date(), productType: SalesProductType = 'salad'): SalesReport {
+  const products = new Map(catalog.products.filter(p => p.type === productType).map(p => [p.id, p]));
   const quantities = new Map<string, { name: string; quantity: number }>();
   for (const product of products.values()) {
     if (!product.deleted) quantities.set(product.id, { name: product.name, quantity: 0 });
@@ -51,7 +54,7 @@ export function buildSalesReport(catalog: Catalog, data: SalesData | null, perio
     let counted = false;
     for (const item of order.items) {
       const quantity = item.quantity - item.refundedQuantity;
-      if (item.productType !== 'salad' || quantity <= 0) continue;
+      if (item.productType !== productType || quantity <= 0) continue;
       const existing = quantities.get(item.productId);
       quantities.set(item.productId, { name: existing?.name ?? products.get(item.productId)?.name ?? item.productName, quantity: (existing?.quantity ?? 0) + quantity });
       counted = true;
@@ -68,5 +71,5 @@ export function buildSalesReport(catalog: Catalog, data: SalesData | null, perio
     const product = products.get(productId);
     return { productId, name: item.name, image: product?.image ?? '', quantity: item.quantity, rank: item.quantity > 0 ? rank : null, share: totalQuantity ? item.quantity / totalQuantity * 100 : 0, archived: !product || product.deleted };
   });
-  return { period, connected: data !== null, updatedAt: data?.updatedAt ?? null, totalQuantity, orderCount, rows };
+  return { productType, period, connected: data !== null, updatedAt: data?.updatedAt ?? null, totalQuantity, orderCount, rows };
 }

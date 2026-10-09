@@ -93,3 +93,40 @@ test('sales adapter reads persisted records, distinguishes missing files and rep
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('drink and dressing reports count normalized option units and refunds within each category', () => {
+  const source = data([
+    order('mixed', [item('a', 3, 1), item('drink', 2, 0, 'drink'), item('dressing', 6, 2, 'dressing')]),
+    order('standalone', [item('drink', 3, 1, 'drink')]),
+    order('cancelled', [item('drink', 100, 0, 'drink'), item('dressing', 100, 0, 'dressing')], 'cancelled'),
+    order('refunded', [item('drink', 100, 0, 'drink')], 'refunded'),
+    order('fully-refunded-option', [item('drink', 1, 1, 'drink'), item('dressing', 1, 1, 'dressing')]),
+  ]);
+  const expanded = {products:[...products,{id:'dressing',type:'dressing',name:'무료 드레싱',image:'',deleted:false},{id:'unused-dressing',type:'dressing',name:'미선택',image:'',deleted:false}]};
+  const drinks = buildSalesReport(expanded, source, 'all', now, 'drink');
+  assert.equal(drinks.productType, 'drink');
+  assert.equal(drinks.totalQuantity, 4);
+  assert.equal(drinks.orderCount, 2);
+  assert.deepEqual(drinks.rows.map(r=>[r.productId,r.quantity,r.rank,r.share]), [['drink',4,1,100]]);
+  const dressings = buildSalesReport(expanded, source, 'all', now, 'dressing');
+  assert.equal(dressings.totalQuantity, 4);
+  assert.equal(dressings.orderCount, 1);
+  assert.deepEqual(dressings.rows.map(r=>[r.productId,r.quantity,r.rank]), [['dressing',4,1],['unused-dressing',0,null]]);
+  assert.equal(buildSalesReport(expanded, source, 'all', now).totalQuantity, 2);
+});
+
+test('category reports preserve archived products, ties, periods and missing data', () => {
+  const expanded={products:[...products,{id:'old-drink',type:'drink',name:'판매 종료 음료',deleted:true}]};
+  const source=data([order('today',[item('drink',2,0,'drink'),item('old-drink',2,0,'drink'),item('purged-drink',1,0,'drink')]),order('old',[item('drink',10,0,'drink')],'paid','2026-10-01T00:00:00Z')]);
+  const result=buildSalesReport(expanded,source,'today',now,'drink');
+  assert.equal(result.totalQuantity,5);
+  assert.deepEqual(result.rows.map(r=>r.rank),[1,1,3]);
+  assert.equal(result.rows.find(r=>r.productId==='old-drink').archived,true);
+  assert.equal(result.rows.find(r=>r.productId==='purged-drink').name,'purged-drink');
+  assert.equal(result.rows.find(r=>r.productId==='drink').share,40);
+  assert.equal(buildSalesReport(expanded,null,'all',now,'dressing').connected,false);
+  const empty=buildSalesReport(expanded,data([]),'all',now,'drink');
+  assert.equal(empty.connected,true);
+  assert.equal(empty.totalQuantity,0);
+  assert.ok(empty.rows.every(r=>r.rank===null));
+});
