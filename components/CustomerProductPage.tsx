@@ -6,6 +6,7 @@ import FoodImage from "@/components/FoodImage";
 import PageHeading from "@/components/PageHeading";
 import ProductCard from "@/components/ProductCard";
 import ProductDetail from "@/components/ProductDetail";
+import SoldOutCover from "@/components/SoldOutCover";
 import ProductRating from "@/components/ProductRating";
 import ProductReviewsPreview from "@/components/ProductReviewsPreview";
 import { formatDeliveryHours, type DeliveryHours } from "@/lib/data/delivery";
@@ -23,6 +24,7 @@ export default function CustomerProductPage({id,hours}:{id:number;hours:Delivery
         <div className="pv-photo">
           <FoodImage id={p.id} sizes="(max-width: 700px) 100vw, 590px" preload />
           {p.tag && <span className="product-tag">{p.tag}</span>}
+          {p.status === "soldout" && <SoldOutCover />}
         </div>
         <div className="pv-info">
           <span className="eyebrow">YOUR DAILY BOWL · {p.en}</span>
