@@ -2,6 +2,8 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## leaf & bowl (샐러드 쇼핑몰 체험 사이트)
 
+[백엔드 요구사항](docs/backend-requirements.md) · [백엔드 설계](docs/backend-design.md): 현재 Next.js 앱 안의 주문 처리·관리 기능과 Prisma 저장 구조.
+
 정적 버전 `leaf-bowl-v2`를 Next.js(App Router)로 옮긴 프론트엔드입니다. 서버·API 없이 화면만 동작합니다.
 
 | 경로 | 내용 |
