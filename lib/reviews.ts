@@ -1,3 +1,6 @@
+/** 리뷰 한 개에 올릴 수 있는 사진 수 */
+export const REVIEW_PHOTO_MAX = 3;
+
 export type Via = "pickup" | "delivery";
 export type SortKey = "new" | "high" | "low";
 
