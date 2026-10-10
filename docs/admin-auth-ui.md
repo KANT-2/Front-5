@@ -4,11 +4,11 @@
 
 `/admin/login`, `/admin/logout`은 관리자 전용 인증 프론트엔드다. 고객 `/login` 및 `bb-user`와 독립적이며, 비밀번호나 관리자 인증 정보를 localStorage/sessionStorage에 저장하지 않는다.
 
-현재 인증 API는 `ADMIN_LOGIN_ID`, `ADMIN_PASSWORD`로 설정한 관리자 계정과 서버 세션을 사용한다. 화면은 임의 로그인·임시 세션을 생성하지 않는다. 따라서 이 변경만으로 `/admin`, `/admin/preview`, `/api/admin/*` 접근이 제한되지는 않는다. 실제 보안 적용은 `docs/backend-design.md`의 identity 구현에서 서버 세션 검사와 함께 진행해야 한다. 계정 생성·회원가입은 포함하지 않는다.
+현재 인증 API는 `ADMIN_LOGIN_ID`, `ADMIN_PASSWORD`로 설정한 관리자 계정과 서버 세션을 사용한다. 화면은 임의 로그인·임시 세션을 생성하지 않는다. 따라서 이 변경만으로 `/admin`, `/admin/preview`, `/api/admin/*` 접근이 제한되지는 않는다. `/api/v1/admin/orders`에는 서버 세션 검사가 적용되어 있고, 나머지 관리자 화면·기존 카탈로그 API 보호는 후속 작업이다. 계정 생성·회원가입은 포함하지 않는다.
 
-## 연결 제안
+## 연결 계약
 
-아래 요청 본문과 응답 규칙은 프론트엔드 연결 제안이며, 백엔드의 최종 확정 계약이 아니다. 경로는 기존 백엔드 설계에 맞췄다. 담당자는 `lib/admin/auth-client.ts`를 조정할 수 있다.
+화면 어댑터 `lib/admin/auth-client.ts`는 현재 identity API의 `loginId` 계약을 따른다.
 
 | 동작 | 요청 | 성공 후 |
 | --- | --- | --- |
