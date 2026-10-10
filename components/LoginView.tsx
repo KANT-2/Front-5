@@ -1,0 +1,83 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import PageHeading from "./PageHeading";
+import { useAuth } from "./AuthProvider";
+import { useToast } from "./ToastProvider";
+import { GoogleIcon } from "./icons/BrandMarks";
+
+export default function LoginView() {
+  const { isLoggedIn, login } = useAuth();
+  const router = useRouter();
+  const toast = useToast();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  useEffect(() => {
+    if (isLoggedIn) router.replace("/mypage");
+  }, [isLoggedIn, router]);
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !password) return;
+    login({ name: email.split("@")[0] || "손님", email: email.trim(), provider: "email" });
+    toast("체험용 임시 로그인입니다");
+    router.push("/mypage");
+  };
+
+  const googleLogin = () => {
+    login({ name: "구글 사용자", email: "google@example.com", provider: "google" });
+    toast("구글 로그인은 체험용 임시 로그인입니다");
+    router.push("/mypage");
+  };
+
+  if (isLoggedIn) return null;
+
+  return (
+    <main className="wrap auth-wrap">
+      <div className="auth-card">
+        <span className="eyebrow">YOUR DAILY BOWL</span>
+        <PageHeading>로그인</PageHeading>
+        <p className="auth-note">
+          체험용 화면입니다. 실제 인증 없이 입력한 이메일로 바로 로그인됩니다.
+        </p>
+        <form onSubmit={submit}>
+          <label className="field">
+            <span>이메일</span>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+            />
+          </label>
+          <label className="field">
+            <span>비밀번호</span>
+            <input
+              type="password"
+              required
+              minLength={1}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="비밀번호"
+              autoComplete="current-password"
+            />
+          </label>
+          <button type="submit" className="primary full form-btn">
+            로그인
+          </button>
+        </form>
+        <div className="auth-divider">
+          <span>또는</span>
+        </div>
+        <button type="button" className="social-btn social-google form-btn full" onClick={googleLogin}>
+          <GoogleIcon />
+          구글로 시작하기
+        </button>
+      </div>
+    </main>
+  );
+}
