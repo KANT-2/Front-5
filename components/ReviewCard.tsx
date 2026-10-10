@@ -1,7 +1,7 @@
 "use client";
 
-import Image from "next/image";
 import { useCustomerCatalog } from "./CustomerCatalogProvider";
+import ReviewPhotos from "./ReviewPhotos";
 import { dateStr, type Review } from "@/lib/reviews";
 
 export default function ReviewCard({ review: r }: { review: Review }) {
@@ -20,7 +20,8 @@ export default function ReviewCard({ review: r }: { review: Review }) {
         <span>{r.stars}.0</span>
       </div>
       <h3>{r.title}</h3>
-      <p>{r.text}</p>{r.images?.map(src=><Image key={src} src={src} alt="고객 리뷰 사진" width={240} height={180} sizes="240px" style={{objectFit:"cover",maxWidth:"100%",height:"auto"}}/>)}
+      <p>{r.text}</p>
+      <ReviewPhotos photos={r.images} label={`${r.title} 리뷰 사진`} size={72} />
       <span className="review-menu">
         {PRODUCTS[r.pid]?.name ?? "삭제된 메뉴"}
       </span>
