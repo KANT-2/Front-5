@@ -15,7 +15,8 @@ interface ReviewsContextValue {
   allReviews: Review[];
   reviewsFor: (pid: number) => Review[];
   statsFor: (pid: number) => ReviewStats;
-  addReview: (review: Review) => Promise<void>;
+  /** 리뷰를 서버에 등록한다. photos 는 브라우저에서 줄인 사진(data: 주소)이며 서버가 파일로 저장한다. */
+  addReview: (review: Review, photos?: string[]) => Promise<void>;
 }
 
 const ReviewsContext = createContext<ReviewsContextValue | null>(null);
@@ -49,8 +50,8 @@ export default function ReviewsProvider({ children }: { children: React.ReactNod
   const allReviews = useMemo(() => reviews.map(r => ({...r, mine: userReviews.some(u => u.id === r.id)})), [reviews, userReviews]);
   const reviewsFor = useCallback((pid: number) => [...reviews.filter(r=>r.pid===pid).map(r=>({...r,mine:userReviews.some(u=>u.id===r.id)}))], [userReviews,reviews]);
   const statsFor = useCallback((pid: number) => statsOf([...reviews.filter(r=>r.pid===pid).map(r=>({...r,mine:userReviews.some(u=>u.id===r.id)}))]), [userReviews,reviews]);
-  const addReview = useCallback(async (review: Review) => {
-    const response=await fetch('/api/reviews',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(review)});
+  const addReview = useCallback(async (review: Review, photos: string[] = []) => {
+    const response=await fetch('/api/reviews',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...review,photos})});
     if(!response.ok)throw Error('리뷰를 저장하지 못했습니다. 다시 시도해주세요.');
     store.set([review,...store.getSnapshot()]);notifyCatalogSaved();
   }, []);
