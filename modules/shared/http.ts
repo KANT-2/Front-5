@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation";
 import { BodyTooLarge, readLimited, sameOrigin } from "@/lib/admin/server";
 import { AppError, errorBody } from "./errors";
 import { toJson } from "./json";
@@ -49,11 +50,13 @@ export function parseOrThrow<T>(schema: { safeParse(v: unknown): { success: true
   throw new AppError(400, custom ?? fallback);
 }
 
-/** route.ts 의 공통 껍데기: AppError 와 예상 못 한 오류를 같은 에러 포맷으로 바꾼다 */
+/** route.ts 의 공통 껍데기: AppError 와 예상 못 한 오류를 같은 에러 포맷으로 바꾼다 (Next.js 내부 오류 제외) */
 export async function run(fn: () => Promise<Response>): Promise<Response> {
   try {
     return await fn();
   } catch (e) {
+    // request.headers 접근 등 Next.js 가 빌드·렌더 중 제어용으로 던지는 오류는 가로채지 않고 그대로 넘긴다
+    unstable_rethrow(e);
     return errorResponse(e);
   }
 }
