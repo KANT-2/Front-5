@@ -253,7 +253,7 @@ active   그 외
 
 ## 주문과 인증
 
-정민님 백엔드 설계안(PR #45)의 `Order`·`OrderItem`·`OrderStatusHistory`·`AdminUser`·`Session` 을 SQL 로 옮긴 것이다. 앱 코드는 아직 없고, 테이블 규칙이 설계대로 지켜지는지를 DB 에서 먼저 확인했다.
+정민님 백엔드 설계안(PR #45)의 `Order`·`OrderItem`·`OrderStatusHistory`·`AdminUser`·`Session` 을 SQL 로 옮긴 것이다. 주문·인증 API는 PR #60에서 메모리 저장소로 구현되었으며, 아직 이 SQL의 DB 테이블에는 연결되지 않았다. 테이블 규칙이 설계대로 지켜지는지를 DB에서 먼저 확인했다.
 
 ```mermaid
 erDiagram
