@@ -3,21 +3,20 @@
 import { useCustomerCatalog } from "./CustomerCatalogProvider";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useAuth } from "./AuthProvider";
 import { useCart } from "./CartProvider";
 import FoodImage from "./FoodImage";
-import OrderSuccessDialog, { type OrderSummary } from "./OrderSuccessDialog";
 import { useToast } from "./ToastProvider";
 import type { DeliveryHours } from "@/lib/data/delivery";
 import { isCustom, isDrink, itemKey, withChoice } from "@/lib/cart";
 import { optionChoices, type CustomerCatalog } from "@/lib/customer/catalog";
 import type { CartItem } from "@/lib/storage";
 import {
-  DELIVERY_AREA_LABEL,
   FREE_DELIVERY_FROM,
   MIN_DELIVERY_ORDER,
   deliveryFee,
-  inDeliveryArea,
   money,
 } from "@/lib/products";
 
@@ -38,6 +37,11 @@ interface TimeOption {
 }
 
 /** 배달 운영 시간 안의 한 시간 단위 중 지금부터 30분 이후에 시작하는 시간대만. */
+/** 지금부터 최소 30분 뒤인지 (지난 시간대로 주문하는 것을 막는다) */
+function isAtLeast30MinAhead(day: string, time: string): boolean {
+  return new Date(`${day}T${time}`).getTime() > Date.now() + 30 * 60000;
+}
+
 function timeOptions(
   day: string,
   now: number,
@@ -57,7 +61,6 @@ export default function CartDrawer({ hours }: { hours: DeliveryHours }) {
   const { isOpen, openedAt, close } = useCart();
   const drawer = useRef<HTMLElement>(null);
   const closeBtn = useRef<HTMLButtonElement>(null);
-  const [order, setOrder] = useState<OrderSummary | null>(null);
 
   // 열려 있는 동안: 본문 스크롤 잠금, Esc 로 닫기, Tab 순환, 닫기 버튼에 포커스
   useEffect(() => {
@@ -116,15 +119,9 @@ export default function CartDrawer({ hours }: { hours: DeliveryHours }) {
         inert={!isOpen}
       >
         {openedAt !== null && (
-          <CartBody
-            openedAt={openedAt}
-            hours={hours}
-            closeBtn={closeBtn}
-            onOrdered={setOrder}
-          />
+          <CartBody openedAt={openedAt} hours={hours} closeBtn={closeBtn} />
         )}
       </aside>
-      <OrderSuccessDialog order={order} onClosed={() => setOrder(null)} />
     </>
   );
 }
@@ -218,11 +215,11 @@ interface BodyProps {
   openedAt: number;
   hours: DeliveryHours;
   closeBtn: React.RefObject<HTMLButtonElement | null>;
-  onOrdered: (order: OrderSummary) => void;
 }
 
-function CartBody({ openedAt, hours, closeBtn, onOrdered }: BodyProps) {
+function CartBody({ openedAt, hours, closeBtn }: BodyProps) {
   const cat = useCustomerCatalog();
+  const router = useRouter();
   const {
     itemAllergens,
     itemName,
@@ -236,7 +233,6 @@ function CartBody({ openedAt, hours, closeBtn, onOrdered }: BodyProps) {
     count,
     update,
     remove,
-    clear,
     close,
     addDrink,
     changeChoice,
@@ -270,9 +266,17 @@ function CartBody({ openedAt, hours, closeBtn, onOrdered }: BodyProps) {
     focusLine.current = null;
     document.getElementById(`choice-${at}`)?.focus();
   }, [items]);
+  const { user } = useAuth();
+  const defaultAddr = user?.addresses.find((a) => a.isDefault);
+  const defaultAddress = defaultAddr
+    ? `${defaultAddr.address}${defaultAddr.detail ? `, ${defaultAddr.detail}` : ""}`
+    : "";
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
-  const [address, setAddress] = useState("");
+  // 아직 직접 입력하지 않았으면(null) 기본 배송지를 보여준다.
+  const [addressInput, setAddressInput] = useState<string | null>(null);
+  const address = addressInput ?? defaultAddress;
+  const setAddress = (v: string) => setAddressInput(v);
   const [ack, setAck] = useState(false);
 
   // 날짜·시간대는 드로어를 연 시각 기준으로 계산하고, 고른 값이 범위를 벗어나면 기본값으로 돌린다.
@@ -291,9 +295,7 @@ function CartBody({ openedAt, hours, closeBtn, onOrdered }: BodyProps) {
     ? ""
     : subtotal < MIN_DELIVERY_ORDER
       ? `배달은 ${money(MIN_DELIVERY_ORDER)} 이상부터 가능해요. ${money(MIN_DELIVERY_ORDER - subtotal)} 더 담아주세요.`
-      : address.trim().length >= 2 && !inDeliveryArea(address)
-        ? `배달 가능 지역(${DELIVERY_AREA_LABEL}) 주소를 입력해주세요.`
-        : "";
+      : "";
 
   const changeQty = (
     e: React.MouseEvent<HTMLButtonElement>,
@@ -323,18 +325,14 @@ function CartBody({ openedAt, hours, closeBtn, onOrdered }: BodyProps) {
       toast("받을 시간대를 선택해주세요");
       return;
     }
-    if (new Date(`${day}T${slot.value}`).getTime() <= Date.now() + 30 * 60000) {
+    if (!isAtLeast30MinAhead(day, slot.value)) {
       toast("현재 시간 이후의 시간대를 선택해주세요");
       return;
     }
-    onOrdered({
-      summary: `${day} ${slot.label} · 예약 배달`,
-      total: subtotal + fee,
-      allergens: [...new Set(items.flatMap(itemAllergens))],
-    });
+    router.push(
+      `/checkout?${new URLSearchParams({ address, day, time: slot.label }).toString()}`,
+    );
     close(false);
-    clear();
-    setAck(false);
   };
 
   return (
@@ -532,9 +530,8 @@ function CartBody({ openedAt, hours, closeBtn, onOrdered }: BodyProps) {
             onChange={(e) => setAddress(e.target.value)}
           />
           <small className="field-hint">
-            배달 가능 {DELIVERY_AREA_LABEL} · 최소 주문{" "}
-            {money(MIN_DELIVERY_ORDER)} · {money(FREE_DELIVERY_FROM)} 이상
-            무료배달
+            최소 주문 {money(MIN_DELIVERY_ORDER)} · {money(FREE_DELIVERY_FROM)}{" "}
+            이상 무료배달
           </small>
         </label>
         <div className="two-fields">
@@ -617,7 +614,7 @@ function CartBody({ openedAt, hours, closeBtn, onOrdered }: BodyProps) {
           type="submit"
           disabled={!items.length || !!deliveryIssue || unavailable}
         >
-          체험 주문 완료하기 →
+          결제하러 가기 →
         </button>
       </form>
     </>
