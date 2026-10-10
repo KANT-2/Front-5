@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { readCatalog } from "@/lib/admin/store";
 import CustomerCatalogProvider from "@/components/CustomerCatalogProvider";
 import type { Metadata, Viewport } from "next";
+import AuthProvider from "@/components/AuthProvider";
 import CartDrawer from "@/components/CartDrawer";
 import CartProvider from "@/components/CartProvider";
 import Footer from "@/components/Footer";
@@ -33,6 +34,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="ko" data-scroll-behavior="smooth">
       <body>
         <CustomerCatalogProvider initial={publicSnapshot(snapshot)}><ToastProvider>
+          <AuthProvider>
           <ReviewsProvider>
 
             <ReviewWriteProvider>
@@ -48,6 +50,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             </ReviewWriteProvider>
 
           </ReviewsProvider>
+          </AuthProvider>
         </ToastProvider></CustomerCatalogProvider>
       </body>
     </html>

@@ -10,7 +10,7 @@ import SoldOutCover from "@/components/SoldOutCover";
 import ProductRating from "@/components/ProductRating";
 import ProductReviewsPreview from "@/components/ProductReviewsPreview";
 import { formatDeliveryHours, type DeliveryHours } from "@/lib/data/delivery";
-import { DELIVERY_AREA_LABEL, DELIVERY_FEE, FREE_DELIVERY_FROM, money } from "@/lib/products";
+import { DELIVERY_FEE, FREE_DELIVERY_FROM, money } from "@/lib/products";
 
 export default function CustomerProductPage({id,hours}:{id:number;hours:DeliveryHours}) {
   const {getProduct,visibleProducts:PRODUCTS,NUTRITION}=useCustomerCatalog();
@@ -43,9 +43,7 @@ export default function CustomerProductPage({id,hours}:{id:number;hours:Delivery
             <dt>배달</dt>
             <dd>
               예약 배달 {money(DELIVERY_FEE)} ({money(FREE_DELIVERY_FROM)} 이상 무료)
-              <small>
-                배달 가능 {DELIVERY_AREA_LABEL} · {formatDeliveryHours(hours)}
-              </small>
+              <small>{formatDeliveryHours(hours)}</small>
             </dd>
           </dl>
           <ProductDetail product={p} />

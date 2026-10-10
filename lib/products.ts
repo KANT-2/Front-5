@@ -52,17 +52,11 @@ export const OPTION_IMAGES: Record<string, string> = {
 
 export const DELIVERY_FEE = 3000;
 // 체험용 예시 배달 정책
-export const DELIVERY_AREAS = ["중구", "종로구"];
-export const DELIVERY_AREA_LABEL = "서울 중구·종로구";
 export const MIN_DELIVERY_ORDER = 15000;
 export const FREE_DELIVERY_FROM = 30000;
 
 export function deliveryFee(subtotal: number): number {
   return subtotal >= FREE_DELIVERY_FROM ? 0 : DELIVERY_FEE;
-}
-
-export function inDeliveryArea(address: string): boolean {
-  return DELIVERY_AREAS.some((a) => address.includes(a));
 }
 // 내 취향 찾기(bowl match) 페이지
 export const MATCH_URL = "/match";
