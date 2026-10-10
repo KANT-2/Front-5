@@ -2,7 +2,7 @@
 -- 관리자 카탈로그(lib/admin/catalog.ts 의 catalogSchema)를 그대로 옮긴 구조.
 -- 지금 .data/admin/catalog.json 한 파일에 저장하는 내용을 테이블로 나눈다.
 -- 실행 순서: schema.sql → seed.sql
--- 재료(bowl match)는 후속 작업으로 이번 스키마에서 제외했다.
+-- 재료와 재료 기준 자동 품절은 맨 아래 '재료' 절에 있다.
 --
 -- 규칙
 -- - id 는 관리자 화면이 만드는 문자열 id 를 그대로 쓴다 (예: salad-0, drink-1).
@@ -149,3 +149,195 @@ CREATE TABLE season_pages (
   visible     BOOLEAN      NOT NULL DEFAULT TRUE,
   sort_order  INTEGER      NOT NULL
 );
+
+-- ─────────────────────────────────────────────────────────────
+-- 재료와 재료 기준 자동 품절
+-- ─────────────────────────────────────────────────────────────
+
+-- (id, type) 로도 참조할 수 있게 한다. 아래 연결 테이블이 "이 id 는 샐러드/드레싱이어야 한다"를 DB 에서 막는 데 쓴다
+ALTER TABLE products ADD CONSTRAINT uq_products_id_type UNIQUE (id, type);
+
+-- 재료. 내 취향 찾기(bowl match)에서 고르는 재료와, 메뉴에만 쓰는 재료(파르메산 등)를 함께 둔다
+CREATE TABLE ingredients (
+  id             VARCHAR(80)   PRIMARY KEY CHECK (id ~ '^[a-zA-Z0-9_-]+$'),
+  name           VARCHAR(80)   NOT NULL,
+  name_en        VARCHAR(100),
+  price          INTEGER       CHECK (price >= 0),                 -- 내 취향 찾기에서 더하는 금액
+  stage          VARCHAR(10)   CHECK (stage IN ('GREENS', 'PROTEIN', 'VEGGIES', 'TOPPINGS')),
+  color          VARCHAR(40),
+  description    VARCHAR(600)  NOT NULL DEFAULT '',
+  image          VARCHAR(200)  NOT NULL DEFAULT '',
+  category       VARCHAR(80)   NOT NULL,
+  status         VARCHAR(10)   NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'soldout', 'hidden')),
+  deleted        BOOLEAN       NOT NULL DEFAULT FALSE,
+  in_bowl_match  BOOLEAN       NOT NULL DEFAULT TRUE,              -- false 면 메뉴에만 쓰고 내 취향 찾기 선택지에는 나오지 않는다
+  sort_order     INTEGER       NOT NULL,
+  -- 내 취향 찾기에서 고르려면 단계와 금액이 있어야 한다
+  CONSTRAINT chk_bowl_match_fields CHECK (NOT in_bowl_match OR (stage IS NOT NULL AND price IS NOT NULL))
+);
+
+-- 재료 ↔ 알레르기 (N:M, 상품과 같은 방식)
+CREATE TABLE ingredient_allergens (
+  ingredient_id  VARCHAR(80) NOT NULL REFERENCES ingredients (id) ON DELETE CASCADE,
+  allergen_id    INTEGER     NOT NULL REFERENCES allergens (id)   ON DELETE RESTRICT,
+  position       SMALLINT    NOT NULL,
+  PRIMARY KEY (ingredient_id, allergen_id)
+);
+
+-- 메뉴 ↔ 재료 (레시피). product_type 은 항상 'salad' 로 채워지는 열이라, 음료·드레싱 id 를 넣으면 외래키가 거부한다
+CREATE TABLE product_ingredients (
+  product_id     VARCHAR(80) NOT NULL,
+  product_type   VARCHAR(10) GENERATED ALWAYS AS ('salad') STORED,
+  ingredient_id  VARCHAR(80) NOT NULL REFERENCES ingredients (id) ON DELETE RESTRICT,
+  is_required    BOOLEAN     NOT NULL DEFAULT TRUE,                 -- false 면 이 재료가 품절이어도 메뉴는 품절이 아니다 (선택 토핑)
+  position       SMALLINT    NOT NULL,
+  PRIMARY KEY (product_id, ingredient_id),
+  FOREIGN KEY (product_id, product_type) REFERENCES products (id, type) ON DELETE CASCADE
+);
+CREATE INDEX idx_product_ingredients_ingredient ON product_ingredients (ingredient_id);
+
+-- 메뉴 ↔ 어울리는 드레싱. 행이 있으면 그 드레싱만 보여준다. '드레싱 없이'는 모든 메뉴에 항상 둔다 (앱 규칙)
+CREATE TABLE product_dressings (
+  product_id     VARCHAR(80) NOT NULL,
+  product_type   VARCHAR(10) GENERATED ALWAYS AS ('salad') STORED,
+  dressing_id    VARCHAR(80) NOT NULL,
+  dressing_type  VARCHAR(10) GENERATED ALWAYS AS ('dressing') STORED,
+  is_default     BOOLEAN     NOT NULL DEFAULT FALSE,
+  sort_order     INTEGER     NOT NULL,
+  PRIMARY KEY (product_id, dressing_id),
+  FOREIGN KEY (product_id, product_type)   REFERENCES products (id, type) ON DELETE CASCADE,
+  FOREIGN KEY (dressing_id, dressing_type) REFERENCES products (id, type) ON DELETE CASCADE
+);
+-- 메뉴마다 기본 드레싱은 하나까지
+CREATE UNIQUE INDEX uq_product_dressings_default ON product_dressings (product_id) WHERE is_default;
+
+-- 메뉴의 실제 판매 상태. 저장하지 않고 재료 상태에서 계산한다 (저장하면 서로 어긋날 수 있다)
+--   hidden  : 메뉴가 숨김·삭제
+--   soldout : 메뉴가 품절이거나, 필수 재료 중 하나라도 품절·숨김·삭제
+--   active  : 그 외
+CREATE VIEW product_availability AS
+SELECT
+  p.id           AS product_id,
+  p.customer_id,
+  CASE
+    WHEN p.deleted OR p.status = 'hidden'                 THEN 'hidden'
+    WHEN p.status = 'soldout' OR cardinality(r.names) > 0 THEN 'soldout'
+    ELSE 'active'
+  END            AS effective_status,
+  r.names        AS soldout_ingredients     -- 품절 이유로 화면에 보여줄 재료 이름
+FROM products p
+LEFT JOIN LATERAL (
+  SELECT COALESCE(array_agg(i.name ORDER BY pi.position), ARRAY[]::text[]) AS names
+  FROM product_ingredients pi
+  JOIN ingredients i ON i.id = pi.ingredient_id
+  WHERE pi.product_id = p.id AND pi.is_required AND (i.deleted OR i.status <> 'active')
+) r ON TRUE
+WHERE p.type = 'salad';
+
+-- 내 취향 찾기 선택지. 품절 재료는 목록에 남기되 available = false (선택 불가)
+CREATE VIEW bowl_match_ingredients AS
+SELECT i.*, (i.status = 'active') AS available
+FROM ingredients i
+WHERE i.in_bowl_match AND NOT i.deleted AND i.status <> 'hidden';
+
+-- ─────────────────────────────────────────────────────────────
+-- 주문·인증 (정민님 백엔드 설계안 PR #45 의 Order·OrderItem·OrderStatusHistory·AdminUser·Session)
+-- ─────────────────────────────────────────────────────────────
+
+-- 관리자 계정. 비밀번호는 해시만 저장한다 (해시 계산은 앱에서)
+CREATE TABLE admin_users (
+  id             UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  login_id       VARCHAR(50)  NOT NULL UNIQUE,
+  password_hash  VARCHAR(255) NOT NULL,
+  disabled       BOOLEAN      NOT NULL DEFAULT FALSE,
+  created_at     TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+-- 세션: 관리자 또는 비회원 방문자. 브라우저 쿠키에는 원본 토큰, DB 에는 토큰의 해시만 저장한다
+CREATE TABLE sessions (
+  id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  token_hash     VARCHAR(64) NOT NULL UNIQUE,
+  kind           VARCHAR(10) NOT NULL CHECK (kind IN ('admin', 'guest')),
+  admin_user_id  UUID        REFERENCES admin_users (id) ON DELETE CASCADE,
+  expires_at     TIMESTAMPTZ NOT NULL,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- 관리자 세션에만 관리자 계정이 있다
+  CONSTRAINT chk_session_admin CHECK ((kind = 'admin') = (admin_user_id IS NOT NULL))
+);
+CREATE INDEX idx_sessions_expires ON sessions (expires_at);
+
+-- 주문. 금액은 원 단위 BIGINT. 접수 후 상품 가격이 바뀌어도 주문 금액은 그대로 (order_items 스냅샷)
+CREATE TABLE orders (
+  id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_session_id UUID         NOT NULL,            -- 주문한 비회원 세션. 세션이 지워져도 주문은 남기므로 외래키는 걸지 않는다
+  status              VARCHAR(10)  NOT NULL DEFAULT 'received'
+                        CHECK (status IN ('received', 'confirmed', 'preparing', 'delivering', 'completed', 'canceled')),
+  version             INTEGER      NOT NULL DEFAULT 1 CHECK (version >= 1),   -- 동시에 바꿀 때 덮어쓰기 방지
+  orderer_name        VARCHAR(50)  NOT NULL,
+  phone               VARCHAR(30)  NOT NULL,
+  address             VARCHAR(300) NOT NULL,
+  address_detail      VARCHAR(200) NOT NULL DEFAULT '',
+  desired_date        DATE         NOT NULL,            -- 받을 날짜
+  desired_slot        VARCHAR(30)  NOT NULL,            -- 받을 시간대 표시 (예: 10:00–11:00)
+  subtotal            BIGINT       NOT NULL CHECK (subtotal >= 0),
+  delivery_fee        BIGINT       NOT NULL CHECK (delivery_fee >= 0),
+  total               BIGINT       NOT NULL,
+  request_key         VARCHAR(80)  NOT NULL,            -- 재전송 식별키 (Idempotency-Key)
+  request_hash        VARCHAR(64)  NOT NULL,            -- 같은 키로 다른 내용을 보내면 충돌을 알리기 위한 요청 내용 해시
+  cancel_reason       VARCHAR(200),
+  canceled_at         TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  CONSTRAINT chk_order_total   CHECK (total = subtotal + delivery_fee),
+  CONSTRAINT chk_order_cancel  CHECK ((status = 'canceled') = (canceled_at IS NOT NULL)),
+  -- 같은 방문자가 같은 키로 다시 보내도 주문은 한 건
+  CONSTRAINT uq_order_request  UNIQUE (customer_session_id, request_key)
+);
+-- 관리자 목록: 상태별 최신순 + 다음 쪽(마지막으로 본 주문 기준)
+CREATE INDEX idx_orders_list ON orders (status, created_at DESC, id DESC);
+CREATE INDEX idx_orders_session ON orders (customer_session_id, created_at DESC);
+
+-- 주문 항목: 주문 당시의 상품명·옵션·단가를 복사해서 저장한다 (이후 상품이 바뀌거나 지워져도 주문 내역은 그대로)
+CREATE TABLE order_items (
+  id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  order_id    UUID        NOT NULL REFERENCES orders (id) ON DELETE CASCADE,
+  product_id  VARCHAR(80) REFERENCES products (id) ON DELETE SET NULL,   -- 참고용. 상품이 지워져도 항목은 남는다
+  name        VARCHAR(80) NOT NULL,                  -- 주문 당시 상품명
+  options     JSONB       NOT NULL DEFAULT '{}'::jsonb,   -- 드레싱·음료·재료 선택 내역
+  unit_price  BIGINT      NOT NULL CHECK (unit_price >= 0),   -- 옵션을 포함한 1개 가격
+  quantity    INTEGER     NOT NULL CHECK (quantity BETWEEN 1 AND 99)
+);
+CREATE INDEX idx_order_items_order ON order_items (order_id);
+
+-- 상태 변경 이력: 누가 언제 무엇에서 무엇으로 바꿨는가
+CREATE TABLE order_status_history (
+  id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  order_id       UUID        NOT NULL REFERENCES orders (id) ON DELETE CASCADE,
+  from_status    VARCHAR(10),                          -- 처음 접수할 때는 NULL
+  to_status      VARCHAR(10) NOT NULL CHECK (to_status IN ('received', 'confirmed', 'preparing', 'delivering', 'completed', 'canceled')),
+  changed_by     VARCHAR(10) NOT NULL CHECK (changed_by IN ('customer', 'admin', 'system')),
+  admin_user_id  UUID        REFERENCES admin_users (id) ON DELETE SET NULL,
+  reason         VARCHAR(200),
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_order_history_order ON order_status_history (order_id, created_at);
+
+-- 허용된 상태 순서만 DB 에서도 한 번 더 막는다 (서비스 코드가 실수해도 잘못된 상태가 저장되지 않게)
+--   접수 → 확인 → 준비 중 → 배달 중 → 완료, 취소는 접수·확인에서만, 완료·취소는 더 바꿀 수 없다
+CREATE FUNCTION enforce_order_status_transition() RETURNS trigger AS $$
+BEGIN
+  IF NEW.status = OLD.status THEN
+    RETURN NEW;
+  END IF;
+  IF (OLD.status, NEW.status) IN (
+       ('received', 'confirmed'), ('confirmed', 'preparing'), ('preparing', 'delivering'), ('delivering', 'completed'),
+       ('received', 'canceled'),  ('confirmed', 'canceled')) THEN
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION '허용되지 않은 주문 상태 변경: % → %', OLD.status, NEW.status USING ERRCODE = '23514';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_order_status_transition
+  BEFORE UPDATE OF status ON orders
+  FOR EACH ROW EXECUTE FUNCTION enforce_order_status_transition();
