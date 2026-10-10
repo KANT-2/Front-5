@@ -3,7 +3,8 @@ import { createLocalStore, type LocalStore } from "./local-store";
 import { DRESSINGS } from "./products";
 
 /** 재료를 하나도 더하지 않은 기본 볼 가격 */
-export const BASE_BOWL_PRICE = 6500;
+import { BASE_BOWL_PRICE } from "./pricing-policy";
+export { BASE_BOWL_PRICE } from "./pricing-policy";
 
 export const STAGES: Stage[] = ["GREENS", "PROTEIN", "VEGGIES", "TOPPINGS"];
 
