@@ -1,4 +1,4 @@
-import { BASE_BOWL_PRICE } from "@/lib/match";
+import { BASE_BOWL_PRICE } from "@/lib/pricing-policy";
 import type { Catalog, Snapshot } from "@/lib/admin/catalog";
 import type { Product } from "@/types/product";
 import { NUTRITION, DRESSING_KCAL, DRINK_KCAL } from "@/lib/products";
