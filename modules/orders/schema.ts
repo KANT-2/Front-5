@@ -12,7 +12,7 @@ function isCalendarDate(value: string): boolean {
 /** 가격은 받지 않는다. 서버가 카탈로그에서 다시 계산한다. */
 export const orderItemSchema = z
   .object({
-    /** 메뉴의 고객 주소 번호 (/product/0 의 0). 내 취향 조합이면 없다 */
+    /** 메뉴의 고객 주소 번호 (/product/0 의 0). 내 취향 조합·음료 단품이면 없다 */
     productId: z.number().int().min(0).max(10000).optional(),
     dressingKey: key.optional(),
     drinkKeys: z.array(key).max(10).default([]),
@@ -21,9 +21,15 @@ export const orderItemSchema = z
     quantity: z.number().int().min(1).max(99),
   })
   .strict()
-  .refine((v) => (v.productId === undefined) === (v.ingredientKeys.length > 0), {
-    message: "메뉴 또는 재료 조합 중 하나만 선택해주세요.",
-  });
+  .refine(
+    (v) => {
+      const menu = v.productId !== undefined;
+      const custom = v.ingredientKeys.length > 0;
+      const drinkOnly = !menu && !custom && v.drinkKeys.length === 1 && v.dressingKey === undefined;
+      return (menu && !custom) || (custom && !menu) || drinkOnly;
+    },
+    { message: "메뉴, 재료 조합, 음료 단품 중 하나만 선택해주세요." },
+  );
 
 export const createOrderSchema = z
   .object({

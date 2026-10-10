@@ -12,6 +12,10 @@ export function jsonResponse(data: unknown, status = 200, headers: Record<string
 
 export function errorResponse(error: unknown): Response {
   const body = errorBody(error);
+  // 예상하지 못한 오류는 운영에서 원인을 찾을 수 있게 서버 로그에 남긴다 (요청 본문·연락처는 남기지 않는다)
+  if (!(error instanceof AppError)) {
+    console.error("[api] unexpected error:", error instanceof Error ? (error.stack ?? error.message) : String(error));
+  }
   return Response.json(body, { status: body.status, headers: NO_STORE });
 }
 

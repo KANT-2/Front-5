@@ -8,6 +8,9 @@ export const DELIVERY_FEE = BigInt(3000);
 export const MIN_DELIVERY_ORDER = BigInt(15000);
 export const FREE_DELIVERY_FROM = BigInt(30000);
 
+/** 내 취향 볼의 기본 가격(재료를 하나도 더하지 않은 볼). 화면의 lib/match.ts BASE_BOWL_PRICE 와 같은 값이다 */
+export const BASE_BOWL_PRICE = BigInt(6500);
+
 export function deliveryFee(subtotal: bigint): bigint {
   return subtotal >= FREE_DELIVERY_FROM ? BigInt(0) : DELIVERY_FEE;
 }
@@ -70,9 +73,8 @@ export function priceOrder(catalog: Catalog, items: OrderItemInput[]): PricedOrd
 }
 
 function priceLine(catalog: Catalog, item: OrderItemInput): PricedLine {
-  return item.productId === undefined
-    ? priceCustomBowl(catalog, item)
-    : priceMenu(catalog, item, item.productId);
+  if (item.productId !== undefined) return priceMenu(catalog, item, item.productId);
+  return item.ingredientKeys.length > 0 ? priceCustomBowl(catalog, item) : priceDrinkOnly(catalog, item);
 }
 
 function priceMenu(catalog: Catalog, item: OrderItemInput, customerId: number): PricedLine {
@@ -122,8 +124,9 @@ function priceMenu(catalog: Catalog, item: OrderItemInput, customerId: number): 
   };
 }
 
-/** 내 취향 찾기 조합: 고른 재료의 가격 합계 (재료 가격이 있는 재료만 고를 수 있다) */
+/** 내 취향 찾기 조합: 기본 볼 + 고른 재료 가격 + 드레싱 (화면의 bowlPrice 와 같은 계산) */
 function priceCustomBowl(catalog: Catalog, item: OrderItemInput): PricedLine {
+  if (item.drinkKeys.length > 0) throw new AppError(400, "내 취향 볼에는 음료를 함께 담을 수 없습니다.");
   if (duplicates(item.ingredientKeys)) throw new AppError(400, "같은 재료를 중복해서 선택할 수 없습니다.");
   const ingredients = item.ingredientKeys.map((k): PricedOption => {
     const found = (catalog.ingredients ?? []).find((i) => i.id === k && !i.deleted);
@@ -133,12 +136,37 @@ function priceCustomBowl(catalog: Catalog, item: OrderItemInput): PricedLine {
     if (found.status !== "active") throw new AppError(400, `품절된 재료가 있습니다: ${found.name}`);
     return { key: found.id, name: found.name, price: found.price };
   });
-  const unitPrice = ingredients.reduce((n, i) => n + BigInt(i.price), BigInt(0));
+  let dressing: PricedOption | undefined;
+  if (item.dressingKey !== undefined) {
+    const p = catalog.products.find((x) => x.type === "dressing" && x.id === item.dressingKey && !x.deleted && x.status !== "hidden");
+    if (!p) throw new AppError(400, "선택할 수 없는 드레싱입니다.");
+    if (!sellable(p)) throw new AppError(400, `품절된 드레싱입니다: ${p.name}`);
+    dressing = { key: p.id, name: p.name, price: p.price };
+  }
+  const unitPrice =
+    BASE_BOWL_PRICE +
+    ingredients.reduce((n, i) => n + BigInt(i.price), BigInt(0)) +
+    BigInt(dressing?.price ?? 0);
   return {
     productId: null,
     name: "내 취향 볼",
-    options: { drinks: [], ingredients },
+    options: { dressing, drinks: [], ingredients },
     unitPrice,
+    quantity: item.quantity,
+  };
+}
+
+/** 음료 단품 (장바구니의 음료 줄) */
+function priceDrinkOnly(catalog: Catalog, item: OrderItemInput): PricedLine {
+  const key = item.drinkKeys[0];
+  const drink = catalog.products.find((p) => p.type === "drink" && p.id === key && !p.deleted && p.status !== "hidden");
+  if (!drink) throw new AppError(400, "선택할 수 없는 음료입니다.");
+  if (!sellable(drink)) throw new AppError(400, `품절된 음료가 있습니다: ${drink.name}`);
+  return {
+    productId: drink.id,
+    name: drink.name,
+    options: { drinks: [], ingredients: [] },
+    unitPrice: BigInt(drink.price),
     quantity: item.quantity,
   };
 }

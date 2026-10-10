@@ -29,7 +29,7 @@ Module._resolveFilename = function (request, ...args) {
   );
 };
 const { customerSeed } = require("../lib/admin/customer-seed.ts");
-const { setServicesForTests } = require("../modules/container.ts");
+const { setServicesForTests, services } = require("../modules/container.ts");
 const { createOrdersService } = require("../modules/orders/service.ts");
 const { createMemoryOrdersRepository } = require("../modules/orders/memory-repository.ts");
 const { createIdentityService } = require("../modules/identity/service.ts");
@@ -271,4 +271,68 @@ test("취소와 상태 변경이 겹치면 한쪽만 적용된다", async () => 
   assert.equal(cancel.status, 200);
   assert.equal(final.status, "canceled");
   assert.ok([200, 409].includes(confirm.status));
+});
+
+test("회귀: 같은 키로 동시에 보낸 요청은 주문 한 건만 만든다", async () => {
+  const catalog = await setup();
+  const cookie = await guest();
+  const rs = await Promise.all([1, 2, 3].map(() => place(cookie, "order-same-0001", orderBody(catalog))));
+  assert.deepEqual(rs.map((r) => r.status).sort(), [200, 200, 201]);
+  assert.equal(new Set((await Promise.all(rs.map(json))).map((b) => b.id)).size, 1);
+});
+
+test("회귀: 다른 Origin 에서 온 쓰기 요청은 거부", async () => {
+  await setup();
+  const res = await routes.session.POST(req("/api/v1/session", { method: "POST", headers: { origin: "https://evil.example" } }));
+  assert.equal(res.status, 403);
+});
+
+test("회귀: X-Forwarded-For 를 바꿔도 같은 계정의 로그인 시도는 제한된다", async () => {
+  await setup();
+  const statuses = [];
+  for (let i = 0; i < 8; i++) {
+    const r = await routes.login.POST(req("/api/v1/auth/login", { method: "POST", body: { loginId: "admin", password: "bad" }, headers: { "x-forwarded-for": `9.9.9.${i}` } }));
+    statuses.push(r.status);
+  }
+  assert.equal(statuses.filter((s) => s === 429).length, 3); // 한도 5 → 6번째부터 막힌다
+});
+
+test("회귀: 예상 못 한 오류는 503 으로 숨기되 서버 로그에는 남긴다", async () => {
+  await setup();
+  const cookie = await guest();
+  setServicesForTests({ ...services(), orders: {} }); // getOrder 가 없어 TypeError
+  const logged = [];
+  const original = console.error;
+  console.error = (...a) => logged.push(a.join(" "));
+  try {
+    const id = "7c1d9f64-2b0a-4a56-9f0e-3c1a8e5b2d10";
+    const res = await routes.order.GET(req(`/api/v1/orders/${id}`, { cookie }), ctx(id));
+    assert.equal(res.status, 503);
+    assert.deepEqual(await json(res), { status: 503, message: "잠시 후 다시 시도해주세요." });
+  } finally {
+    console.error = original;
+  }
+  assert.equal(logged.length, 1);
+  assert.match(logged[0], /unexpected error/);
+});
+
+test("관리자 취소는 사유·시각·변경자를 기록하고, 음료 단품 주문도 접수된다", async () => {
+  const catalog = await setup();
+  const g = await guest();
+  const admin = await adminCookie();
+  const id = (await json(await place(g, "order-cancel-0001", orderBody(catalog)))).id;
+  const res = await routes.adminStatus.PATCH(
+    req(`/api/v1/admin/orders/${id}/status`, { method: "PATCH", cookie: admin, body: { status: "canceled", version: 1, reason: "재료 소진" } }),
+    ctx(id),
+  );
+  assert.equal(res.status, 200);
+  const record = await services().orders.getOrder((await services().orders.listOrders({ limit: 5 })).items[0].customerSessionId, id);
+  assert.equal(record.cancelReason, "재료 소진");
+  assert.ok(record.canceledAt);
+  assert.deepEqual(record.history.map((h) => [h.fromStatus, h.toStatus, h.changedBy]), [[null, "received", "customer"], ["received", "canceled", "admin"]]);
+
+  const orange = catalog.products.find((p) => p.type === "drink" && p.name === "오렌지 주스").id;
+  const drinks = await place(g, "order-drink-0001", orderBody(catalog, { items: [{ drinkKeys: [orange], quantity: 5 }] }));
+  assert.equal(drinks.status, 201); // 4000원 x 5 = 20000, 배달비 3000
+  assert.equal((await json(drinks)).total, "23000");
 });

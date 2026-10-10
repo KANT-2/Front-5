@@ -11,6 +11,8 @@ export async function POST(request: Request) {
     const { identity, limits } = services();
     limits.login.hit(clientIp(request));
     const { loginId, password } = parseOrThrow(loginSchema, await readJsonBody(request, 2_000), "아이디와 패스워드를 입력해주세요.");
+    // 접속자 구분값은 속일 수 있으므로 계정 단위 제한을 함께 건다 (무차별 대입 방지)
+    limits.login.hit(`id:${loginId.toLowerCase()}`);
     const { token, expiresAt } = await identity.login(loginId, password);
     return jsonResponse({ ok: true }, 200, { "Set-Cookie": sessionCookie(ADMIN_COOKIE, token, expiresAt) });
   });

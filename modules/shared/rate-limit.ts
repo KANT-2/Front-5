@@ -20,6 +20,12 @@ export function createRateLimiter(limit: number, windowMs: number, now: () => nu
 
 export type RateLimiter = ReturnType<typeof createRateLimiter>;
 
+/**
+ * 요청 제한용 접속자 구분값. X-Forwarded-For 는 클라이언트가 앞쪽 값을 마음대로 채울 수 있으므로
+ * 앞단 프록시가 마지막에 덧붙인 오른쪽 끝 값을 쓴다. 프록시가 없으면 이 값은 믿을 수 없으니
+ * 중요한 제한(로그인)은 계정 단위 제한을 함께 건다.
+ */
 export function clientIp(request: Request): string {
-  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const parts = (request.headers.get("x-forwarded-for") ?? "").split(",").map((p) => p.trim()).filter(Boolean);
+  return parts[parts.length - 1] ?? "unknown";
 }

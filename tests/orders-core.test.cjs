@@ -135,23 +135,47 @@ test("pricing: 거부해야 하는 주문", () => {
   throws400(() => priceOrder(drinkSold, [item({ drinkKeys: [orange] })]), /품절된 음료/);
 });
 
-test("pricing: 내 취향 조합은 재료 가격 합계, 품절·숨김 재료는 거부", () => {
+test("pricing: 내 취향 조합은 화면의 bowlPrice(기본 볼 + 재료)와 같고, 품절·숨김 재료는 거부", () => {
+  const { BASE_BOWL_PRICE } = require("../lib/match.ts");
   const c = catalog();
   const priced = c.ingredients.filter((i) => i.price !== undefined && i.status === "active" && !i.deleted).slice(0, 4);
   assert.equal(priced.length, 4);
   const keys = priced.map((i) => i.id);
   const sum = priced.reduce((n, i) => n + i.price, 0);
-  const mk = (ks, q = 3) => schema.orderItemSchema.parse({ ingredientKeys: ks, quantity: q });
-  const r = priceOrder(c, [mk(keys, 99)]);
-  assert.equal(r.lines[0].unitPrice, big(sum));
+  const mk = (ks, extra = {}) => schema.orderItemSchema.parse({ ingredientKeys: ks, quantity: 99, ...extra });
+  const r = priceOrder(c, [mk(keys)]);
+  assert.equal(r.lines[0].unitPrice, big(BASE_BOWL_PRICE + sum));
   assert.equal(r.lines[0].productId, null);
+  // 드레싱을 고르면 그 드레싱 가격이 더해지고 스냅샷에 남는다
+  const dr = priceOrder(c, [mk(keys, { dressingKey: dressingKey(c, "시저") })]);
+  assert.equal(dr.lines[0].options.dressing.name, "시저");
+  throws400(() => priceOrder(c, [mk(keys, { dressingKey: "dressing-99" })]), /드레싱/);
+  throws400(() => priceOrder(c, [mk(keys, { drinkKeys: [drinkKey(c, "오렌지 주스")] })]), /음료/);
   const target = c.ingredients.find((i) => i.id === keys[0]);
   target.status = "soldout";
-  throws400(() => priceOrder(c, [mk(keys, 99)]), /품절된 재료/);
+  throws400(() => priceOrder(c, [mk(keys)]), /품절된 재료/);
   target.status = "hidden";
-  throws400(() => priceOrder(c, [mk(keys, 99)]), /선택할 수 없는 재료/);
-  throws400(() => priceOrder(catalog(), [mk(["nope"], 99)]), /선택할 수 없는 재료/);
-  throws400(() => priceOrder(catalog(), [mk([keys[0], keys[0]], 99)]), /중복/);
+  throws400(() => priceOrder(c, [mk(keys)]), /선택할 수 없는 재료/);
+  throws400(() => priceOrder(catalog(), [mk(["nope"])]), /선택할 수 없는 재료/);
+  throws400(() => priceOrder(catalog(), [mk([keys[0], keys[0]])]), /중복/);
+});
+
+test("pricing: 음료 단품 주문 (장바구니의 음료 줄)", () => {
+  const c = catalog();
+  const orange = drinkKey(c, "오렌지 주스");
+  const price = c.products.find((p) => p.id === orange).price;
+  const item = (extra = {}) => schema.orderItemSchema.parse({ drinkKeys: [orange], quantity: 4, ...extra });
+  const r = priceOrder(c, [item()]);
+  assert.equal(r.lines[0].unitPrice, big(price));
+  assert.equal(r.lines[0].name, "오렌지 주스");
+  assert.equal(r.subtotal, big(price * 4));
+  // 형태 검사: 음료 2개 단품, 드레싱 동반, 음료도 메뉴도 재료도 없음은 거부
+  assert.throws(() => item({ drinkKeys: [orange, orange] }));
+  assert.throws(() => item({ dressingKey: "dressing-0" }));
+  assert.throws(() => schema.orderItemSchema.parse({ quantity: 1 }));
+  c.products.find((p) => p.id === orange).status = "soldout";
+  throws400(() => priceOrder(c, [item()]), /품절된 음료/);
+  throws400(() => priceOrder(catalog(), [item({ drinkKeys: ["drink-99"] })]), /선택할 수 없는 음료/);
 });
 
 test("schema: 주문 입력 검사 (가격 변조 필드·형식 오류 거부)", () => {
