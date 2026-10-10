@@ -251,6 +251,103 @@ active   그 외
 | 4 | 선택 재료(토핑) 품절 | `is_required` 로 구분, 기본은 필수 |
 | 5 | 메뉴별 드레싱 | 팀(매장 기준)이 확정. '드레싱 없이'는 항상 허용 |
 
+## 주문과 인증
+
+정민님 백엔드 설계안(PR #45)의 `Order`·`OrderItem`·`OrderStatusHistory`·`AdminUser`·`Session` 을 SQL 로 옮긴 것이다. 앱 코드는 아직 없고, 테이블 규칙이 설계대로 지켜지는지를 DB 에서 먼저 확인했다.
+
+```mermaid
+erDiagram
+  admin_users ||--o{ sessions : "관리자 세션"
+  orders ||--|{ order_items : "항목"
+  orders ||--o{ order_status_history : "이력"
+  products |o--o{ order_items : "참고용"
+  admin_users |o--o{ order_status_history : "변경자"
+
+  orders {
+    uuid id PK
+    uuid customer_session_id "비회원 세션, 외래키 없음"
+    varchar status "received·confirmed·preparing·delivering·completed·canceled"
+    int version "동시 변경 방지"
+    bigint subtotal
+    bigint delivery_fee
+    bigint total "subtotal + delivery_fee"
+    varchar request_key "재전송 식별키"
+    varchar request_hash "요청 내용 해시"
+    date desired_date
+    varchar desired_slot
+  }
+  order_items {
+    bigint id PK
+    uuid order_id FK
+    varchar product_id FK "상품이 지워지면 NULL"
+    varchar name "주문 당시 상품명"
+    jsonb options "드레싱·음료·재료"
+    bigint unit_price "주문 당시 단가"
+    int quantity "1~99"
+  }
+  order_status_history {
+    bigint id PK
+    uuid order_id FK
+    varchar from_status "접수 때는 NULL"
+    varchar to_status
+    varchar changed_by "customer·admin·system"
+  }
+  admin_users {
+    uuid id PK
+    varchar login_id UK
+    varchar password_hash
+  }
+  sessions {
+    uuid id PK
+    varchar token_hash UK "원본 토큰은 쿠키에만"
+    varchar kind "admin·guest"
+    uuid admin_user_id FK
+    timestamptz expires_at
+  }
+```
+
+### 설계안과 SQL 의 대응
+
+| 설계안 | SQL |
+| --- | --- |
+| 주문 UUID, 상태, `version`, 주문자·연락처·주소·희망 시각, 상품 합계·배달비·총액 | `orders` 의 같은 이름 칸 (`total` 은 `subtotal + delivery_fee` 와 같아야 한다는 CHECK) |
+| 고객 세션 ID 와 `requestKey` 복합 유일 | `UNIQUE (customer_session_id, request_key)` |
+| `requestHash` | `request_hash` (같은 키로 다른 내용을 보내면 서비스가 409) |
+| 금액은 원 단위, 합계는 BigInt | `BIGINT`. JSON 응답에서는 십진 문자열로 변환 |
+| 주문 항목은 주문 당시 값의 스냅샷 | `order_items.name·options·unit_price`. `product_id` 는 참고용(상품이 지워지면 NULL) |
+| 상태 변경 이력 | `order_status_history` |
+| `(status, createdAt, id)` 검색용 인덱스와 마지막 주문 기준 다음 쪽 | `idx_orders_list (status, created_at DESC, id DESC)` |
+| 관리자·비회원 구분 세션, 토큰 해시 | `sessions.kind`, `token_hash` |
+| 비밀번호 해시 | `admin_users.password_hash` |
+| 카탈로그 버전 행을 읽기·쓰기 잠금 | 기존 `catalog_meta` 행을 `FOR SHARE`(주문)·`FOR UPDATE`(관리자 저장)로 잠근다 |
+
+### DB 가 한 번 더 막아 주는 것
+
+- 상태 순서: `received → confirmed → preparing → delivering → completed`, 취소는 `received`·`confirmed` 에서만, 완료·취소는 더 바꿀 수 없다 (트리거). 서비스 코드가 실수해도 잘못된 상태가 저장되지 않는다.
+- 취소 상태와 취소 시각은 함께 있어야 한다. 합계가 맞지 않으면 저장되지 않는다.
+- 관리자 세션에는 관리자 계정이, 비회원 세션에는 없어야 한다.
+- 수량은 1~99, 단가는 0 이상이다.
+- 주문을 지우면 항목·이력이 함께 정리되고, 관리자 계정을 지우면 그 세션도 정리된다.
+
+### 서비스가 맡는 것 (DB 만으로 안 되는 것)
+
+- 같은 키로 다시 보내면: 같은 내용(`request_hash` 가 같음)이면 기존 주문을 반환, 다르면 409. 키 중복(`23505`/Prisma `P2002`)은 트랜잭션을 취소하고 기존 주문을 다시 읽어 처리한다.
+- 상태 변경: `UPDATE ... WHERE id = ? AND version = ? AND status = ?` 로 바꾸고 변경 건수가 0 이면 409. 성공하면 `version + 1` 과 이력을 같은 트랜잭션에 저장한다.
+- 가격 계산은 서버가 카탈로그에서 다시 한다 (화면이 보낸 가격을 믿지 않는다).
+- 비밀번호 해시 계산, 세션 쿠키 설정, 요청 제한.
+
+### 검증 (PGlite, 실제 PostgreSQL)
+
+`check_orders.mjs` 시나리오 37개 통과: 주문 접수(주문·항목·이력 한 트랜잭션), 같은 키 재전송 중복 거부와 다른 세션 분리, 두 관리자가 같은 `version` 으로 바꿀 때 한 명만 성공, 허용되지 않는 상태 변경 거부, 취소 규칙, 상품 가격·이름이 바뀌거나 상품이 지워져도 주문 항목 유지, 항목 규칙, 세션 규칙, 관리자 목록의 다음 쪽 조회.
+
+**한계**: 시험이 연결 1개라 "진짜 동시에 두 명"은 재현하지 못한다. `version` 조건이 0 건이 되어 덮어쓰기를 막는 논리까지만 확인했고, **읽기·쓰기 잠금(`FOR SHARE`/`FOR UPDATE`)은 실제 PostgreSQL 서버에서 따로 확인해야 한다.**
+
+### 이번에 넣지 않은 것
+
+- 고객 계정(회원): 설계안은 "고객 세션"만 있다. 프론트의 로그인·마이페이지(#55, mock)와 맞추려면 고객 계정 테이블이 필요하며, 범위는 팀 결정을 기다린다.
+- 결제(PG): 별도 범위.
+- 주문 알림, 매장 관리: 제외.
+
 ## 저장 방식 (store.ts 교체 계획)
 
 `lib/admin/store.ts` (#23 기준)의 공개 함수 3개를 DB 로 바꾼다. 호출하는 API·화면은 그대로 둔다.
@@ -283,3 +380,5 @@ DBeaver 에서는 SQL 편집기에 파일 내용을 붙여넣고 **스크립트 
 - [ ] 서현님: store.ts 의 readCatalog·writeCatalog·appendCustomerReview 를 DB 로 바꾸는 것 동의, catalog.ts 변경 계획 공유
 - [ ] DB 접근 방식: Prisma (정민님 설계 PR #45). 이 문서의 `db/schema.sql` 은 기존 DB 를 `db pull` 로 가져올 때 기준(baseline)이 된다
 - [ ] 재료·메뉴별 드레싱: 위 '정해야 할 것' 5개, 관리자 화면의 재료·드레싱 선택 (서현님)
+- [ ] 주문·인증: 비회원 주문 조회 방식(세션이 만료되면 본인 주문을 어떻게 확인하나), 주문·개인정보 보관 기간, 배달 가능 조건 (설계안의 미정 사항)
+- [ ] 실제 PostgreSQL 서버에서 읽기·쓰기 잠금 동시성 시험

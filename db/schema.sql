@@ -239,3 +239,105 @@ CREATE VIEW bowl_match_ingredients AS
 SELECT i.*, (i.status = 'active') AS available
 FROM ingredients i
 WHERE i.in_bowl_match AND NOT i.deleted AND i.status <> 'hidden';
+
+-- ─────────────────────────────────────────────────────────────
+-- 주문·인증 (정민님 백엔드 설계안 PR #45 의 Order·OrderItem·OrderStatusHistory·AdminUser·Session)
+-- ─────────────────────────────────────────────────────────────
+
+-- 관리자 계정. 비밀번호는 해시만 저장한다 (해시 계산은 앱에서)
+CREATE TABLE admin_users (
+  id             UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  login_id       VARCHAR(50)  NOT NULL UNIQUE,
+  password_hash  VARCHAR(255) NOT NULL,
+  disabled       BOOLEAN      NOT NULL DEFAULT FALSE,
+  created_at     TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+-- 세션: 관리자 또는 비회원 방문자. 브라우저 쿠키에는 원본 토큰, DB 에는 토큰의 해시만 저장한다
+CREATE TABLE sessions (
+  id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  token_hash     VARCHAR(64) NOT NULL UNIQUE,
+  kind           VARCHAR(10) NOT NULL CHECK (kind IN ('admin', 'guest')),
+  admin_user_id  UUID        REFERENCES admin_users (id) ON DELETE CASCADE,
+  expires_at     TIMESTAMPTZ NOT NULL,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- 관리자 세션에만 관리자 계정이 있다
+  CONSTRAINT chk_session_admin CHECK ((kind = 'admin') = (admin_user_id IS NOT NULL))
+);
+CREATE INDEX idx_sessions_expires ON sessions (expires_at);
+
+-- 주문. 금액은 원 단위 BIGINT. 접수 후 상품 가격이 바뀌어도 주문 금액은 그대로 (order_items 스냅샷)
+CREATE TABLE orders (
+  id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_session_id UUID         NOT NULL,            -- 주문한 비회원 세션. 세션이 지워져도 주문은 남기므로 외래키는 걸지 않는다
+  status              VARCHAR(10)  NOT NULL DEFAULT 'received'
+                        CHECK (status IN ('received', 'confirmed', 'preparing', 'delivering', 'completed', 'canceled')),
+  version             INTEGER      NOT NULL DEFAULT 1 CHECK (version >= 1),   -- 동시에 바꿀 때 덮어쓰기 방지
+  orderer_name        VARCHAR(50)  NOT NULL,
+  phone               VARCHAR(30)  NOT NULL,
+  address             VARCHAR(300) NOT NULL,
+  address_detail      VARCHAR(200) NOT NULL DEFAULT '',
+  desired_date        DATE         NOT NULL,            -- 받을 날짜
+  desired_slot        VARCHAR(30)  NOT NULL,            -- 받을 시간대 표시 (예: 10:00–11:00)
+  subtotal            BIGINT       NOT NULL CHECK (subtotal >= 0),
+  delivery_fee        BIGINT       NOT NULL CHECK (delivery_fee >= 0),
+  total               BIGINT       NOT NULL,
+  request_key         VARCHAR(80)  NOT NULL,            -- 재전송 식별키 (Idempotency-Key)
+  request_hash        VARCHAR(64)  NOT NULL,            -- 같은 키로 다른 내용을 보내면 충돌을 알리기 위한 요청 내용 해시
+  cancel_reason       VARCHAR(200),
+  canceled_at         TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  CONSTRAINT chk_order_total   CHECK (total = subtotal + delivery_fee),
+  CONSTRAINT chk_order_cancel  CHECK ((status = 'canceled') = (canceled_at IS NOT NULL)),
+  -- 같은 방문자가 같은 키로 다시 보내도 주문은 한 건
+  CONSTRAINT uq_order_request  UNIQUE (customer_session_id, request_key)
+);
+-- 관리자 목록: 상태별 최신순 + 다음 쪽(마지막으로 본 주문 기준)
+CREATE INDEX idx_orders_list ON orders (status, created_at DESC, id DESC);
+CREATE INDEX idx_orders_session ON orders (customer_session_id, created_at DESC);
+
+-- 주문 항목: 주문 당시의 상품명·옵션·단가를 복사해서 저장한다 (이후 상품이 바뀌거나 지워져도 주문 내역은 그대로)
+CREATE TABLE order_items (
+  id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  order_id    UUID        NOT NULL REFERENCES orders (id) ON DELETE CASCADE,
+  product_id  VARCHAR(80) REFERENCES products (id) ON DELETE SET NULL,   -- 참고용. 상품이 지워져도 항목은 남는다
+  name        VARCHAR(80) NOT NULL,                  -- 주문 당시 상품명
+  options     JSONB       NOT NULL DEFAULT '{}'::jsonb,   -- 드레싱·음료·재료 선택 내역
+  unit_price  BIGINT      NOT NULL CHECK (unit_price >= 0),   -- 옵션을 포함한 1개 가격
+  quantity    INTEGER     NOT NULL CHECK (quantity BETWEEN 1 AND 99)
+);
+CREATE INDEX idx_order_items_order ON order_items (order_id);
+
+-- 상태 변경 이력: 누가 언제 무엇에서 무엇으로 바꿨는가
+CREATE TABLE order_status_history (
+  id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  order_id       UUID        NOT NULL REFERENCES orders (id) ON DELETE CASCADE,
+  from_status    VARCHAR(10),                          -- 처음 접수할 때는 NULL
+  to_status      VARCHAR(10) NOT NULL CHECK (to_status IN ('received', 'confirmed', 'preparing', 'delivering', 'completed', 'canceled')),
+  changed_by     VARCHAR(10) NOT NULL CHECK (changed_by IN ('customer', 'admin', 'system')),
+  admin_user_id  UUID        REFERENCES admin_users (id) ON DELETE SET NULL,
+  reason         VARCHAR(200),
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_order_history_order ON order_status_history (order_id, created_at);
+
+-- 허용된 상태 순서만 DB 에서도 한 번 더 막는다 (서비스 코드가 실수해도 잘못된 상태가 저장되지 않게)
+--   접수 → 확인 → 준비 중 → 배달 중 → 완료, 취소는 접수·확인에서만, 완료·취소는 더 바꿀 수 없다
+CREATE FUNCTION enforce_order_status_transition() RETURNS trigger AS $$
+BEGIN
+  IF NEW.status = OLD.status THEN
+    RETURN NEW;
+  END IF;
+  IF (OLD.status, NEW.status) IN (
+       ('received', 'confirmed'), ('confirmed', 'preparing'), ('preparing', 'delivering'), ('delivering', 'completed'),
+       ('received', 'canceled'),  ('confirmed', 'canceled')) THEN
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION '허용되지 않은 주문 상태 변경: % → %', OLD.status, NEW.status USING ERRCODE = '23514';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_order_status_transition
+  BEFORE UPDATE OF status ON orders
+  FOR EACH ROW EXECUTE FUNCTION enforce_order_status_transition();
