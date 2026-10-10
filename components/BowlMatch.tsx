@@ -134,7 +134,8 @@ function DoneCard({
 
 /**
  * 재료 카드를 좌우로 넘겨 나만의 샐러드를 만드는 화면 (예전 public/bowl-match 정적 페이지를 옮김).
- * 선택 기록과 저장한 조합은 예전과 같은 localStorage 키(bm-decisions, bm-recipe)를 쓴다.
+ * "내 조합 저장하기"로 남긴 조합만 예전과 같은 localStorage 키(bm-recipe)를 써서 방문이 바뀌어도
+ * 남는다. 지금 넘기고 있는 카드 진행 상황은 이번 방문에서만 유지된다.
  */
 export default function BowlMatch() {
   const { ingredients,revision,visibleProducts,DRESSINGS }=useCustomerCatalog();
@@ -200,6 +201,17 @@ function BowlMatchBody({ingredients}:{ingredients:Ingredient[]}) {
   const makeBtn = useRef<HTMLButtonElement>(null);
 
   const setDecisions = (list: Decision[]) => decisionsStore.set(list);
+
+  // 다른 페이지로 갔다 돌아와도(Activity로 숨겨졌다 다시 보여도) 카드 진행 상황과 결과 창은
+  // 유지하지 않고 새로 시작한다. "내 조합 저장하기"로 남긴 조합(recipeStore)은 건드리지 않는다.
+  useLayoutEffect(() => {
+    return () => {
+      decisionsStore.set([]);
+      setResultOpen(false);
+      setSavedNote("");
+    };
+  }, []);
+
   const lock = (v: boolean) => {
     busyRef.current = v;
     setBusy(v);
