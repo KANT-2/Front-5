@@ -111,3 +111,36 @@ html:has(dialog[open]) { overflow: hidden; }
   .rw[open] { animation: rw-up .22s ease-out; }
   @keyframes rw-up { from { transform: translateY(40px); opacity: .6; } to { transform: none; opacity: 1; } }
 }
+
+/* ===== 리뷰 사진 ===== */
+/* 쓰기 모달: 첨부 사진 미리보기와 추가 버튼 */
+.rw-photo-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.rw-photo { position: relative; width: 80px; height: 80px; border-radius: 8px; overflow: hidden; background: var(--color-pale); }
+.rw-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rw-photo button { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%; background: #233d31cc; color: #fff; font-size: 14px; line-height: 1; display: grid; place-items: center; }
+.rw-photo-add { width: 80px; height: 80px; border: 1px dashed #9fb28f; border-radius: 8px; background: #fff; color: var(--color-brand); font-size: 11px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.rw-photo-add span { font-size: 20px; line-height: 1; }
+.rw-photo-add:hover:not(:disabled) { border-style: solid; background: var(--color-soft); }
+
+/* 목록: 대표 사진 1장 (+N), 마우스를 올리면 흐려지며 "사진 보기" */
+.rv-photo { position: relative; display: block; flex: none; margin-top: 12px; border-radius: 8px; overflow: hidden; background: var(--color-pale); }
+.rv-photo img { width: 100%; height: 100%; object-fit: cover; display: block; transition: filter .2s, transform .2s; }
+.rv-photo-count { position: absolute; right: 6px; bottom: 6px; padding: 2px 7px; border-radius: 10px; background: #233d31d9; color: #fff; font-size: 11px; font-weight: 600; }
+.rv-photo-hover { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-size: 12px; font-weight: 700; opacity: 0; transition: opacity .2s; }
+.rv-photo:hover img, .rv-photo:focus-visible img { filter: blur(2px) brightness(.7); transform: scale(1.04); }
+.rv-photo:hover .rv-photo-hover, .rv-photo:focus-visible .rv-photo-hover { opacity: 1; }
+
+/* 크게 보기 */
+.pviewer { max-width: min(760px, calc(100vw - 24px)); width: 100%; padding: 0; background: #14261e; color: #fff; overflow: hidden; }
+.pviewer::backdrop { background: #0b1611e6; }
+.pviewer-body { position: relative; padding: 48px 16px 16px; }
+.pviewer-frame { position: relative; width: 100%; height: min(70dvh, 560px); }
+.pviewer-frame img { object-fit: contain; }
+.pviewer-close { position: absolute; top: 8px; right: 10px; width: 34px; height: 34px; border-radius: 50%; background: #ffffff1f; color: #fff; font-size: 22px; line-height: 1; display: grid; place-items: center; }
+.pviewer-nav { display: flex; align-items: center; justify-content: center; gap: 22px; margin-top: 12px; }
+.pviewer-nav button { width: 40px; height: 40px; border-radius: 50%; background: #ffffff1f; color: #fff; font-size: 20px; display: grid; place-items: center; }
+.pviewer-nav button:hover { background: #ffffff33; }
+.pviewer-nav span { font-size: 13px; min-width: 44px; text-align: center; }
+@media (prefers-reduced-motion: reduce) { .rv-photo img, .rv-photo-hover { transition: none; } }
+/* 홈 리뷰 카드: 사진이 커도 카드가 늘어나지 않게 작은 대표 사진만 */
+.review-card .rv-photo { margin: 0 0 12px; }
