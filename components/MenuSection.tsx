@@ -2,11 +2,12 @@
 
 import { useCustomerCatalog } from "./CustomerCatalogProvider";
 import Link from "next/link";
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import PageHeading from "./PageHeading";
 import ProductCard from "./ProductCard";
 import { useReviews } from "./ReviewsProvider";
 import { MATCH_URL, type Product } from "@/lib/products";
+import { ALLERGEN_ORDER } from "@/lib/allergens";
 
 type Filter = string;
 
@@ -24,8 +25,6 @@ const SORTS: { key: SortKey; label: string }[] = [
 ];
 
 // 메뉴에 실제로 있는 알레르기만 (보여주는 순서 고정)
-const ALLERGEN_ORDER = ["닭고기", "연어", "새우", "대두", "우유", "쇠고기", "참치", "밀", "계란", "생선", "토마토"];
-
 
 export default function MenuSection() {
   const { NUTRITION } = useCustomerCatalog();
@@ -38,6 +37,11 @@ export default function MenuSection() {
   const [sort, setSort] = useState<SortKey>("default");
   const [excluded, setExcluded] = useState<string[]>([]);
   const [showAllergy, setShowAllergy] = useState(false);
+  // 다른 페이지로 갔다 돌아와도(Activity로 숨겨졌다 다시 보여도) 알레르기 제외 선택은
+  // 유지하지 않고 매번 새로 고르게 한다.
+  useLayoutEffect(() => {
+    return () => setExcluded([]);
+  }, []);
 
   const q = term.trim().toLowerCase();
   const found = visibleProducts.filter(
@@ -121,7 +125,7 @@ export default function MenuSection() {
           ))}
           {excluded.length > 0 && (
             <button type="button" className="allergy-clear" onClick={() => setExcluded([])}>
-              선택 해제
+              초기화
             </button>
           )}
         </div>

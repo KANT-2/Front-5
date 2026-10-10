@@ -1,8 +1,8 @@
 "use client";
 import Link from "next/link";
 import FoodImage from "./FoodImage";
+import ReviewPhotos from "./ReviewPhotos";
 import {useCustomerCatalog} from "./CustomerCatalogProvider";
-import Image from "next/image";
 import { dateStr, type Review } from "@/lib/reviews";
 
 /** 리뷰 목록의 한 줄. showMenu 가 true 면(전체 리뷰) 어떤 메뉴의 리뷰인지 사진과 이름을 붙인다. */
@@ -22,7 +22,7 @@ export default function ReviewItem({ review: r, showMenu }: { review: Review; sh
       </div>
       <h3>{r.title}</h3>
       <p>{r.text}</p>
-      {r.images?.map((src,index)=><Image key={src} src={src} alt={`리뷰 사진 ${index+1}`} width={120} height={120} />)}
+      <ReviewPhotos photos={r.images} label={`${r.title} 리뷰 사진`} />
       <div className="rv-item-meta">
         {showMenu && p && (
           <Link className="rv-item-menu" href={`/product/${p.id}`}>
