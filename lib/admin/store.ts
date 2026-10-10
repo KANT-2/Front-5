@@ -125,6 +125,8 @@ export async function appendCustomerReview(input: {
   title: string;
   text: string;
   via: "pickup" | "delivery";
+  /** 서버에 저장한 리뷰 사진 주소 (/api/admin/images/...) */
+  images?: string[];
 }): Promise<Snapshot> {
   return withLock(async () => {
     const current = await readState();
@@ -149,6 +151,7 @@ export async function appendCustomerReview(input: {
       body: input.text,
       via: input.via,
       menu: product.name,
+      ...(input.images?.length ? { images: input.images } : {}),
       date: createdAt.slice(0, 10).replaceAll("-", "."),
       createdAt,
       deleted: false,
